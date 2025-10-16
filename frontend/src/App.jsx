@@ -1,23 +1,31 @@
-import { BrowserRouter, Routes, Route } from "react-router-dom";
-import Layout from "./layout/Layout";
-import Home from "./pages/home";
-import About from "./pages/about";
+import React from "react";
+import { Toaster } from "react-hot-toast";
+import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import MainLayout from "./layout/MainLayout";
+import Home from "./pages/Home";
+import Dashboard from "./pages/Dashboard";
 import Books from "./pages/Books";
 import Members from "./pages/Members";
 import Transactions from "./pages/Transactions";
+import About from "./pages/About";
 
-export default function App() {
+function App() {
   return (
-    <BrowserRouter>
+    <Router>
       <Routes>
-        <Route element={<Layout />}>
-          <Route path="/" element={<Home />} />
-          <Route path="/about" element={<About />} />
-          <Route path="/books" element={<Books />} />
-          <Route path="/members" element={<Members />} />
-          <Route path="/transactions" element={<Transactions />} />
+        <Route path="/" element={<MainLayout />}>
+          <Route index element={<Home />} />
+          <Route path="dashboard" element={<Dashboard />} />
+          <Route path="books" element={<Books />} />
+          <Route path="members" element={<Members />} />
+          <Route path="transactions" element={<Transactions />} />
+          <Route path="about" element={<About />} />
         </Route>
       </Routes>
-    </BrowserRouter>
+
+      <Toaster position="top-right" reverseOrder={false} />
+    </Router>
   );
 }
+
+export default App;
