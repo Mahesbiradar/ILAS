@@ -45,6 +45,7 @@ INSTALLED_APPS = [
     # Local apps
     'core',
     'library',
+    'accounts',
 ]
 
 MIDDLEWARE = [
@@ -59,6 +60,22 @@ MIDDLEWARE = [
 ]
 
 ROOT_URLCONF = 'ilas_backend.urls'
+
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ),
+}
+
+CORS_ALLOW_ALL_ORIGINS = True  # for local testing
+
+# JWT Settings (optional tweak)
+from datetime import timedelta
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(hours=1),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=1),
+}
+
 
 TEMPLATES = [
     {
@@ -140,4 +157,7 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",  # React app
     "http://127.0.0.1:5173",
 ]
+
+AUTH_USER_MODEL = 'accounts.User'
+
 
