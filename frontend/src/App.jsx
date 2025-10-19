@@ -2,20 +2,20 @@ import React from "react";
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import { Toaster } from "react-hot-toast";
 
-// 🧩 Layout
+// 🧱 Layout
 import MainLayout from "./components/layout/MainLayout";
 
-// 🧭 Pages
+// 📄 Pages
 import Home from "./pages/Home";
 import Dashboard from "./pages/Dashboard";
 import Books from "./pages/Books";
 import Members from "./pages/Members";
-import Transactions from "./pages/Transactions";
-import About from "./pages/About";
 import Login from "./pages/Login";
+import LibraryOps from "./pages/LibraryOps";
+import UserTransactions from "./pages/UserTransactions";
+import AdminTransactions from "./pages/AdminTransactions";
 
-
-// 🔐 Context & Route Guards
+// 🔐 Auth & Role Guards
 import { AuthProvider } from "./context/AuthProvider";
 import ProtectedRoute from "./routes/ProtectedRoute";
 import RoleGuard from "./routes/RoleGuard";
@@ -25,16 +25,14 @@ function App() {
     <Router>
       <AuthProvider>
         <Routes>
-
-          {/* ===========================
+          {/* ==========================
               🔓 Public Routes
-          ============================ */}
+          =========================== */}
           <Route path="/login" element={<Login />} />
-          <Route path="/signup" element={<Signup />} />
 
-          {/* ===========================
+          {/* ==========================
               🔐 Protected Main Routes
-          ============================ */}
+          =========================== */}
           <Route
             path="/"
             element={
@@ -43,13 +41,12 @@ function App() {
               </ProtectedRoute>
             }
           >
-            {/* 🏠 Common User Routes */}
+            {/* 🏠 Common Routes */}
             <Route index element={<Home />} />
             <Route path="dashboard" element={<Dashboard />} />
             <Route path="books" element={<Books />} />
-            <Route path="about" element={<About />} />
 
-            {/* 👥 Members & Transactions (Staff Access) */}
+            {/* 👥 Member Management */}
             <Route
               path="members"
               element={
@@ -58,44 +55,51 @@ function App() {
                 </RoleGuard>
               }
             />
+
+            {/* 💳 Transactions */}
             <Route
-              path="transactions"
+              path="transactions/user"
+              element={
+                <RoleGuard allowedRoles={["user", "student"]}>
+                  <UserTransactions />
+                </RoleGuard>
+              }
+            />
+            <Route
+              path="transactions/admin"
               element={
                 <RoleGuard allowedRoles={["admin", "librarian"]}>
-                  <Transactions />
+                  <AdminTransactions />
                 </RoleGuard>
               }
             />
 
-            {/* 🛠️ Admin-Only Routes */}
+            {/* 🛠️ Library Operations (Admin Only) */}
             <Route
-              path="admin/dashboard"
+              path="library-ops"
               element={
                 <RoleGuard allowedRoles={["admin"]}>
-                  <Dashboard />
-                </RoleGuard>
-              }
-            />
-            <Route
-              path="admin/members"
-              element={
-                <RoleGuard allowedRoles={["admin"]}>
-                  <Members />
-                </RoleGuard>
-              }
-            />
-            <Route
-              path="admin/transactions"
-              element={
-                <RoleGuard allowedRoles={["admin"]}>
-                  <Transactions />
+                  <LibraryOps />
                 </RoleGuard>
               }
             />
           </Route>
+
+          {/* ❌ 404 Fallback */}
+          <Route
+            path="*"
+            element={
+              <div className="flex flex-col items-center justify-center min-h-screen text-center">
+                <h1 className="text-5xl font-bold text-red-600">404</h1>
+                <p className="text-gray-500 mt-2">
+                  The page you’re looking for doesn’t exist or has been moved.
+                </p>
+              </div>
+            }
+          />
         </Routes>
 
-        {/* Global Toaster Notification */}
+        {/* 🔔 Toast Notifications */}
         <Toaster position="top-right" reverseOrder={false} />
       </AuthProvider>
     </Router>
