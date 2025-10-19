@@ -1,134 +1,59 @@
-import React, { useState } from "react";
-import { Outlet, Link, useNavigate } from "react-router-dom";
-import { Menu, X, BookOpen, LayoutDashboard } from "lucide-react";
-import { useAuth } from "../context/AuthProvider";
-import toast from "react-hot-toast";
+import React, { useEffect, useState } from "react";
+import { Outlet } from "react-router-dom";
+import Sidebar from "./Sidebar";
+import Header from "./Header";
+import { useAuth } from "../../context/AuthProvider";
 
+/**
+ * MainLayout - wraps pages with sidebar + header and content area.
+ * Keeps responsive behaviour: sidebar collapses on mobile.
+ */
 export default function MainLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const { user, logout } = useAuth();
-  const navigate = useNavigate();
+  const { user, loading } = useAuth();
 
-  const handleLogout = () => {
-    logout(); // call logout from context
-    toast.success("Logged out successfully!");
-    navigate("/login");
-  };
+  // Close sidebar on route change or when window is resized above md
+  useEffect(() => {
+    const onResize = () => {
+      if (window.innerWidth >= 768) {
+        setSidebarOpen(true);
+      } else {
+        setSidebarOpen(false);
+      }
+    };
+    onResize();
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-gray-500">Loading...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-screen bg-gray-50 text-gray-800">
-      {/* Sidebar */}
-      <aside
-        className={`fixed md:static top-0 left-0 z-20 bg-white shadow-md w-64 h-full transform ${
-          sidebarOpen ? "translate-x-0" : "-translate-x-full"
-        } md:translate-x-0 transition-transform duration-300`}
-      >
-        <div className="p-5 flex justify-between items-center border-b">
-          <h1 className="text-2xl font-bold text-blue-700 flex items-center gap-2">
-            <BookOpen size={22} /> ILAS
-          </h1>
-          <button
-            className="md:hidden text-gray-600 hover:text-blue-700"
-            onClick={() => setSidebarOpen(false)}
-          >
-            <X size={22} />
-          </button>
-        </div>
+      {/* Sidebar (desktop: visible; mobile: toggled) */}
+      <div className={`hidden md:block`}>
+        <Sidebar collapsed={true} user={user} onClose={() => setSidebarOpen(false)} />
+      </div>
 
-        <nav className="p-5 space-y-4 text-gray-700 font-medium">
-          <Link
-            to="/"
-            className="block hover:text-blue-600 transition-colors duration-200"
-            onClick={() => setSidebarOpen(false)}
-          >
-            Home
-          </Link>
+      {/* Mobile slide-in */}
+      <div className={`${sidebarOpen ? "block" : "hidden"} md:hidden`}>
+        <Sidebar collapsed={sidebarOpen} user={user} onClose={() => setSidebarOpen(false)} />
+      </div>
 
-          <Link
-            to="/dashboard"
-            className="block hover:text-blue-600 transition-colors duration-200"
-            onClick={() => setSidebarOpen(false)}
-          >
-            <span className="flex items-center gap-2">
-              <LayoutDashboard size={18} /> Dashboard
-            </span>
-          </Link>
-
-          <Link
-            to="/books"
-            className="block hover:text-blue-600 transition-colors duration-200"
-            onClick={() => setSidebarOpen(false)}
-          >
-            Books
-          </Link>
-
-          <Link
-            to="/members"
-            className="block hover:text-blue-600 transition-colors duration-200"
-            onClick={() => setSidebarOpen(false)}
-          >
-            Members
-          </Link>
-
-          <Link
-            to="/transactions"
-            className="block hover:text-blue-600 transition-colors duration-200"
-            onClick={() => setSidebarOpen(false)}
-          >
-            Transactions
-          </Link>
-
-          <Link
-            to="/about"
-            className="block hover:text-blue-600 transition-colors duration-200"
-            onClick={() => setSidebarOpen(false)}
-          >
-            About
-          </Link>
-        </nav>
-      </aside>
-
-      {/* Main Content */}
+      {/* Main content (right side) */}
       <div className="flex-1 flex flex-col min-h-screen">
-        {/* Header */}
-        <header className="bg-white shadow-md p-4 flex justify-between items-center sticky top-0 z-10">
-          <div className="flex items-center gap-3">
-            <button
-              className="md:hidden text-gray-600 hover:text-blue-700"
-              onClick={() => setSidebarOpen(!sidebarOpen)}
-            >
-              <Menu size={24} />
-            </button>
-            <h2 className="text-lg md:text-xl font-semibold text-gray-800">
-              Innovative Library Automation System
-            </h2>
-          </div>
-
-          <div className="flex items-center gap-3">
-            {user && (
-              <span className="text-sm text-gray-700 font-medium">
-                {user.username} ({user.role || "user"})
-              </span>
-            )}
-            <button
-              onClick={handleLogout}
-              className="px-3 py-1 bg-blue-600 text-white rounded-md hover:bg-blue-700 shadow-sm transition-colors"
-            >
-              Logout
-            </button>
-          </div>
-        </header>
-
-        {/* Page Content */}
-        <main className="flex-1 p-6 bg-gray-50">
+        <Header onToggleSidebar={() => setSidebarOpen((s) => !s)} />
+        <main className="flex-1 p-4 md:p-6">
           <Outlet />
         </main>
-
-        {/* Footer */}
-        <footer className="bg-gray-800 text-gray-300 text-center py-3 mt-auto">
-          <p className="text-sm">
-            © {new Date().getFullYear()} ILAS — Innovative Library Automation System
-          </p>
+        <footer className="bg-white border-t py-3 text-center text-sm text-gray-500">
+          © {new Date().getFullYear()} ILAS — Innovative Library Automation System
         </footer>
       </div>
     </div>

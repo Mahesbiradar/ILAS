@@ -1,3 +1,4 @@
+// src/context/AuthProvider.jsx
 import React, { createContext, useContext, useState, useEffect } from "react";
 import api from "../api/axios";
 import toast from "react-hot-toast";
@@ -7,20 +8,33 @@ export const useAuth = () => useContext(AuthContext);
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => {
-    const savedUser = localStorage.getItem("user");
-    return savedUser ? JSON.parse(savedUser) : null;
+    try {
+      const u = localStorage.getItem("user");
+      return u ? JSON.parse(u) : null;
+    } catch {
+      return null;
+    }
   });
   const [loading, setLoading] = useState(true);
 
-  // 🔹 Fetch user if token is valid
+  // Fetch current user if access token exists
   const fetchUser = async () => {
+    const access = localStorage.getItem("access");
+    if (!access) {
+      setLoading(false);
+      setUser(null);
+      return;
+    }
     try {
       const res = await api.get("auth/me/");
       setUser(res.data);
       localStorage.setItem("user", JSON.stringify(res.data));
-    } catch {
+    } catch (err) {
+      console.warn("fetchUser failed", err.response?.data || err.message);
+      localStorage.removeItem("access");
+      localStorage.removeItem("refresh");
+      localStorage.removeItem("user");
       setUser(null);
-      localStorage.clear();
     } finally {
       setLoading(false);
     }
@@ -28,81 +42,59 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     fetchUser();
+    // eslint-disable-next-line
   }, []);
 
-  // 🔹 Login
+  // Login
   const login = async (credentials) => {
-    try {
-      const res = await api.post("auth/login/", credentials);
-      const { tokens, user } = res.data;
-      if (!tokens || !user) throw new Error("Invalid response format");
+    const res = await api.post("auth/login/", credentials);
+    // Expected format: { user, tokens: { access, refresh } }
+    const tokens = res.data.tokens || res.data;
+    const loggedUser = res.data.user;
+    const access = tokens?.access;
+    const refresh = tokens?.refresh;
+    if (!access || !refresh || !loggedUser) {
+      throw new Error("Invalid login response from server");
+    }
+    localStorage.setItem("access", access);
+    localStorage.setItem("refresh", refresh);
+    localStorage.setItem("user", JSON.stringify(loggedUser));
+    setUser(loggedUser);
+    return { user: loggedUser };
+  };
 
-      localStorage.setItem("access", tokens.access);
-      localStorage.setItem("refresh", tokens.refresh);
-      localStorage.setItem("user", JSON.stringify(user));
-      setUser(user);
-      toast.success(`Welcome, ${user.username}!`);
-      return { user };
-    } catch (err) {
-      console.error("Login error:", err.response?.data || err.message);
-      toast.error("Login failed. Check your credentials.");
-      throw err;
+  // Signup
+  const signup = async (payload) => {
+    const res = await api.post("auth/register/", payload);
+    // if backend returns tokens, store them and set user
+    if (res.data?.tokens) {
+      const { access, refresh } = res.data.tokens;
+      localStorage.setItem("access", access);
+      localStorage.setItem("refresh", refresh);
+      localStorage.setItem("user", JSON.stringify(res.data.user));
+      setUser(res.data.user);
+      toast.success("Account created & logged in");
+      return res.data.user;
+    } else {
+      toast.success("Account created, please login");
+      return null;
     }
   };
 
-  // 🔹 Signup
-  const signup = async (data) => {
-    try {
-      const res = await api.post("auth/register/", data);
-      const tokens = res.data.tokens || {};
-      const user = res.data.user;
-
-      if (res.status === 201 && user) {
-        localStorage.setItem("access", tokens.access || "");
-        localStorage.setItem("refresh", tokens.refresh || "");
-        localStorage.setItem("user", JSON.stringify(user));
-        setUser(user);
-        toast.success("Account created successfully!");
-        return { user };
-      } else {
-        toast.error("Signup failed. Try again.");
-        return false;
-      }
-    } catch (err) {
-      console.error("Signup error:", err.response?.data || err.message);
-      toast.error("Signup failed. Try again.");
-      throw err;
-    }
-  };
-
-  // 🔹 Logout
+  // Logout
   const logout = () => {
-    localStorage.clear();
+    localStorage.removeItem("access");
+    localStorage.removeItem("refresh");
+    localStorage.removeItem("user");
     setUser(null);
-    toast("Logged out successfully");
+    toast.success("Logged out");
   };
-
-  // 🔹 Refresh token
-  const refreshAccessToken = async () => {
-    const refresh = localStorage.getItem("refresh");
-    if (!refresh) return;
-    try {
-      const res = await api.post("auth/refresh/", { refresh });
-      localStorage.setItem("access", res.data.access);
-    } catch {
-      logout();
-    }
-  };
-
-  // Auto-refresh token every 13 min
-  useEffect(() => {
-    const interval = setInterval(refreshAccessToken, 13 * 60 * 1000);
-    return () => clearInterval(interval);
-  }, []);
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, signup, logout }}>
-      {!loading && children}
+    <AuthContext.Provider
+      value={{ user, loading, login, signup, logout, fetchUser }}
+    >
+      {!loading ? children : <div className="p-8">Loading...</div>}
     </AuthContext.Provider>
   );
 }

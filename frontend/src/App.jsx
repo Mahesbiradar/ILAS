@@ -3,7 +3,7 @@ import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import { Toaster } from "react-hot-toast";
 
 // 🧩 Layout
-import MainLayout from "./layout/MainLayout";
+import MainLayout from "./components/layout/MainLayout";
 
 // 🧭 Pages
 import Home from "./pages/Home";
@@ -13,12 +13,12 @@ import Members from "./pages/Members";
 import Transactions from "./pages/Transactions";
 import About from "./pages/About";
 import Login from "./pages/Login";
-import Signup from "./pages/Signup";
+
 
 // 🔐 Context & Route Guards
 import { AuthProvider } from "./context/AuthProvider";
-import ProtectedRoute from "./components/ProtectedRoute";
-import RoleGuard from "./components/RoleGuard";
+import ProtectedRoute from "./routes/ProtectedRoute";
+import RoleGuard from "./routes/RoleGuard";
 
 function App() {
   return (
