@@ -6,7 +6,7 @@ import { Toaster } from "react-hot-toast";
 import MainLayout from "./components/layout/MainLayout";
 
 // 📄 Pages
-import Home from "./pages/Home";
+import Home from "./pages/Home"; // Shared home page for user & admin
 import Dashboard from "./pages/Dashboard";
 import Books from "./pages/Books";
 import Members from "./pages/Members";
@@ -14,6 +14,7 @@ import Login from "./pages/Login";
 import LibraryOps from "./pages/LibraryOps";
 import UserTransactions from "./pages/UserTransactions";
 import AdminTransactions from "./pages/AdminTransactions";
+import About from "./pages/About"; // optional About page
 
 // 🔐 Auth & Role Guards
 import { AuthProvider } from "./context/AuthProvider";
@@ -41,12 +42,46 @@ function App() {
               </ProtectedRoute>
             }
           >
-            {/* 🏠 Common Routes */}
-            <Route index element={<Home />} />
-            <Route path="dashboard" element={<Dashboard />} />
-            <Route path="books" element={<Books />} />
+            {/* ==========================
+                🏠 Common Home Page
+                (Admin, Librarian, User)
+            =========================== */}
+            <Route
+              path="home"
+              element={
+                <RoleGuard allowedRoles={["user", "admin", "librarian"]}>
+                  <Home />
+                </RoleGuard>
+              }
+            />
 
-            {/* 👥 Member Management */}
+            {/* ==========================
+                📚 Common Books Page
+            =========================== */}
+            <Route
+              path="books"
+              element={
+                <RoleGuard allowedRoles={["user", "admin", "librarian"]}>
+                  <Books />
+                </RoleGuard>
+              }
+            />
+
+            {/* ==========================
+                🧭 Dashboard
+            =========================== */}
+            <Route
+              path="dashboard"
+              element={
+                <RoleGuard allowedRoles={["user", "admin", "librarian"]}>
+                  <Dashboard />
+                </RoleGuard>
+              }
+            />
+
+            {/* ==========================
+                👥 Member Management (Admin + Librarian)
+            =========================== */}
             <Route
               path="members"
               element={
@@ -56,7 +91,9 @@ function App() {
               }
             />
 
-            {/* 💳 Transactions */}
+            {/* ==========================
+                💳 Transactions
+            =========================== */}
             <Route
               path="transactions/user"
               element={
@@ -74,12 +111,26 @@ function App() {
               }
             />
 
-            {/* 🛠️ Library Operations (Admin Only) */}
+            {/* ==========================
+                🛠️ Library Operations (Admin Only)
+            =========================== */}
             <Route
               path="library-ops"
               element={
                 <RoleGuard allowedRoles={["admin"]}>
                   <LibraryOps />
+                </RoleGuard>
+              }
+            />
+
+            {/* ==========================
+                ℹ️ About Page
+            =========================== */}
+            <Route
+              path="about"
+              element={
+                <RoleGuard allowedRoles={["user", "admin", "librarian"]}>
+                  <About />
                 </RoleGuard>
               }
             />

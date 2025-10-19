@@ -1,78 +1,110 @@
 import React from "react";
-import { Link, useLocation } from "react-router-dom";
-import { Home, BookOpen, Users, Repeat, Info, Menu, X, LayoutDashboard } from "lucide-react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import {
+  Home,
+  BookOpen,
+  Users,
+  Info,
+  LibraryBig,
+  LayoutDashboard,
+  LogOut,
+  User,
+  X,
+} from "lucide-react";
 import { motion } from "framer-motion";
+import { useAuth } from "../../context/AuthProvider";
 
 export default function Sidebar({ collapsed, onClose, user }) {
   const location = useLocation();
+  const { logout } = useAuth();
+  const navigate = useNavigate();
 
   const nav = [
-    { to: "/", label: "Home", icon: <Home size={16} /> },
-    { to: "/dashboard", label: "Dashboard", icon: <LayoutDashboard size={16} /> },
-    { to: "/books", label: "Books", icon: <BookOpen size={16} /> },
-    { to: "/members", label: "Members", icon: <Users size={16} />, admin: true },
-    { to: "/transactions", label: "Transactions", icon: <Repeat size={16} />, admin: true },
-    { to: "/about", label: "About", icon: <Info size={16} /> },
+    { to: "/home", label: "Home", icon: <Home size={18} /> },
+    { to: "/dashboard", label: "Dashboard", icon: <LayoutDashboard size={18} /> },
+    { to: "/books", label: "Books", icon: <BookOpen size={18} /> },
+    { to: "/library-ops", label: "Library Ops", icon: <LibraryBig size={18} />, admin: true },
+    { to: "/members", label: "Members", icon: <Users size={18} />, admin: true },
+    { to: "/about", label: "About", icon: <Info size={18} /> },
   ];
 
   return (
-    // motion.div for slide-in/out on mobile
     <motion.aside
-      initial={{ x: -300 }}
-      animate={{ x: collapsed ? 0 : -300 }}
+      initial={{ x: -280 }}
+      animate={{ x: collapsed ? 0 : -280 }}
       transition={{ type: "tween" }}
-      className="fixed md:static z-30 left-0 top-0 bottom-0 w-64 bg-white border-r shadow-lg md:translate-x-0"
+      className="fixed md:static top-0 left-0 h-full w-64 bg-white shadow-[2px_0_6px_rgba(0,0,0,0.05)] flex flex-col z-30"
     >
-      <div className="h-full flex flex-col">
-        <div className="flex items-center justify-between px-5 py-4 border-b">
-          <Link to="/" className="flex items-center gap-2">
-            <BookOpen size={20} className="text-blue-600" />
-            <span className="text-xl font-bold text-blue-700">ILAS</span>
-          </Link>
+      {/* ILAS Logo Header */}
+      <div className="flex items-center justify-between h-[56px] px-5 bg-gradient-to-r from-blue-50 to-white shadow-[0_2px_6px_rgba(0,0,0,0.05)]">
+        <Link to="/home" className="flex items-center gap-2">
+          <BookOpen size={22} className="text-blue-600" />
+          <span className="text-lg font-semibold text-blue-700 tracking-wide">ILAS</span>
+        </Link>
+        <button
+          className="md:hidden p-1 rounded hover:bg-gray-100"
+          onClick={onClose}
+          aria-label="Close sidebar"
+        >
+          <X size={18} />
+        </button>
+      </div>
 
-          <button
-            className="md:hidden p-1 rounded hover:bg-gray-100"
-            onClick={onClose}
-            aria-label="Close sidebar"
-          >
-            <X size={18} />
-          </button>
+      {/* Navigation */}
+      <nav className="flex-1 overflow-y-auto p-3 space-y-1 mt-2">
+        {nav.map((item) => {
+          if (item.admin && user?.role !== "admin") return null;
+          const active = location.pathname === item.to;
+          return (
+            <Link
+              key={item.to}
+              to={item.to}
+              className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-all
+                ${
+                  active
+                    ? "bg-blue-100 text-blue-700 font-semibold shadow-sm"
+                    : "text-gray-700 hover:bg-blue-50 hover:text-blue-600"
+                }`}
+              onClick={() => {
+                window.scrollTo(0, 0);
+                if (typeof onClose === "function") onClose();
+              }}
+            >
+              <span>{item.icon}</span>
+              <span>{item.label}</span>
+            </Link>
+          );
+        })}
+      </nav>
+
+      {/* User Info */}
+      <div className="p-4 mt-auto border-t border-gray-100">
+        <div className="flex items-center gap-3 mb-3">
+          <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-semibold text-sm">
+            {user?.username?.charAt(0)?.toUpperCase() || "U"}
+          </div>
+          <div>
+            <div className="text-sm font-medium">{user?.username || "Guest"}</div>
+            <div className="text-xs text-gray-500 capitalize">{user?.role || "visitor"}</div>
+          </div>
         </div>
 
-        <nav className="p-4 space-y-1 overflow-y-auto flex-1">
-          {nav.map((item) => {
-            if (item.admin && (!user || user.role !== "admin")) return null;
-            const active = location.pathname === item.to;
-            return (
-              <Link
-                key={item.to}
-                to={item.to}
-                className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm hover:bg-blue-50 transition
-                  ${active ? "bg-blue-50 text-blue-700 font-semibold" : "text-gray-700"}`}
-                onClick={() => {
-                  // scroll to top & close on mobile
-                  window.scrollTo(0, 0);
-                  if (typeof onClose === "function") onClose();
-                }}
-              >
-                <span className="text-gray-500">{item.icon}</span>
-                <span>{item.label}</span>
-              </Link>
-            );
-          })}
-        </nav>
-
-        <div className="p-4 border-t">
-          <div className="text-xs text-gray-500 mb-1">Signed in as</div>
-          <div className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600">
-              {user?.username?.charAt(0)?.toUpperCase() || "U"}
-            </div>
-            <div>
-              <div className="text-sm font-medium">{user?.username || "Guest"}</div>
-              <div className="text-xs text-gray-500">{user?.role || "visitor"}</div>
-            </div>
-          </div>
+        <div className="flex flex-col gap-1 mt-2">
+          <button
+            onClick={() => navigate("/profile")}
+            className="flex items-center gap-2 text-sm px-2 py-1.5 rounded-md text-gray-700 hover:bg-gray-100 transition"
+          >
+            <User size={15} /> Profile
+          </button>
+          <button
+            onClick={() => {
+              logout();
+              navigate("/login");
+            }}
+            className="flex items-center gap-2 text-sm px-2 py-1.5 rounded-md text-red-600 hover:bg-red-50 transition"
+          >
+            <LogOut size={15} /> Logout
+          </button>
         </div>
       </div>
     </motion.aside>
