@@ -1,247 +1,118 @@
 import React, { useEffect, useState } from "react";
-import axios from "axios";
+import api from "../api/axios";
+import { useAuth } from "../context/AuthProvider";
 import toast from "react-hot-toast";
 
-const Books = () => {
-  const API_URL = "http://127.0.0.1:8000/api/books/";
+import BookForm from "../components/books/BookForm";
+import BookFilter from "../components/books/BookFilter";
+import BookCard from "../components/books/BookCard";
+import BookTable from "../components/books/BookTable";
 
+export default function Books() {
+  const { user } = useAuth();
   const [books, setBooks] = useState([]);
-  const [formData, setFormData] = useState({
-    title: "",
-    author: "",
-    isbn: "",
-    category: "",
-    quantity: 1,
-  });
-  const [editId, setEditId] = useState(null);
+  const [borrowed, setBorrowed] = useState([]); // 🔹 User borrow requests
   const [loading, setLoading] = useState(false);
+  const [search, setSearch] = useState("");
+  const [category, setCategory] = useState("");
+
+  // ✅ Fetch books
+  const fetchBooks = async () => {
+    setLoading(true);
+    try {
+      const res = await api.get("books/");
+      setBooks(res.data);
+    } catch (err) {
+      console.error("Failed to fetch books", err);
+      toast.error("Unable to fetch books. Please check the server.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ✅ Fetch user’s borrowed books
+  const fetchBorrowed = async () => {
+    if (!user) return;
+    try {
+      const res = await api.get("borrow/");
+      setBorrowed(res.data);
+    } catch (err) {
+      console.error("Failed to load borrow list", err);
+    }
+  };
 
   useEffect(() => {
     fetchBooks();
-  }, []);
+    if (user?.role === "user") fetchBorrowed();
+  }, [user]);
 
-  const fetchBooks = async () => {
+  // ✅ Borrow a book (for users)
+  const handleBorrow = async (bookId) => {
     try {
-      setLoading(true);
-      const res = await axios.get(API_URL);
-          console.log("Books fetched:", res.data);
-
-      setBooks(res.data);
+      const res = await api.post("borrow/", { book: bookId });
+      toast.success("Borrow request sent!");
+      fetchBorrowed();
     } catch (err) {
-      console.error("Error fetching books:", err);
-      toast.error("Failed to load books. Ensure backend is running.");
-    } finally {
-      setLoading(false);
+      console.error("Borrow failed:", err.response?.data || err.message);
+      toast.error(
+        err.response?.data?.detail || "Could not send borrow request."
+      );
     }
   };
 
-  const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+  // ✅ Check borrow status for a book
+  const getBorrowStatus = (bookId) => {
+    const record = borrowed.find((r) => r.book === bookId);
+    return record ? record.status : null;
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-
-    try {
-      if (editId) {
-        await axios.patch(`${API_URL}${editId}/`, formData);
-        toast.success("📘 Book updated successfully!");
-      } else {
-        await axios.post(API_URL, formData);
-        toast.success("✅ Book added successfully!");
-      }
-
-      setFormData({
-        title: "",
-        author: "",
-        isbn: "",
-        category: "",
-        quantity: 1,
-      });
-      setEditId(null);
-      fetchBooks();
-    } catch (err) {
-      toast.error("Failed to save book. Check required fields.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleEdit = (book) => {
-    setFormData({
-      title: book.title,
-      author: book.author,
-      isbn: book.isbn,
-      category: book.category,
-      quantity: book.quantity,
-    });
-    setEditId(book.book_id || book.id);
-  };
-
-  const handleDelete = async (id) => {
-    if (!window.confirm("Are you sure you want to delete this book?")) return;
-    try {
-      await axios.delete(`${API_URL}${id}/`);
-      toast.success("🗑️ Book deleted successfully!");
-      fetchBooks();
-    } catch (err) {
-      toast.error("Failed to delete book.");
-    }
-  };
-
-  const handleCancelEdit = () => {
-    setEditId(null);
-    setFormData({
-      title: "",
-      author: "",
-      isbn: "",
-      category: "",
-      quantity: 1,
-    });
-  };
+  // 🔹 Filtered book list
+  const filteredBooks = books.filter(
+    (b) =>
+      b.title.toLowerCase().includes(search.toLowerCase()) &&
+      (category ? b.category === category : true)
+  );
 
   return (
-    <div className="w-full px-4 md:px-8 lg:px-16 py-6">
+    <div className="max-w-7xl mx-auto px-4 py-6">
       <h1 className="text-2xl md:text-3xl font-bold text-center text-blue-700 mb-6">
-        📚 Library Book Management
+        📚 Library Books
       </h1>
 
-      {/* Book Form */}
-      <form
-        onSubmit={handleSubmit}
-        className="bg-white shadow-md rounded-lg p-4 md:p-6 mb-6 border border-gray-100"
-      >
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
-          <input
-            type="text"
-            name="title"
-            placeholder="Book Title"
-            value={formData.title}
-            onChange={handleChange}
-            required
-            className="border border-gray-300 p-2 rounded-md focus:ring-2 focus:ring-blue-500 outline-none"
-          />
-          <input
-            type="text"
-            name="author"
-            placeholder="Author"
-            value={formData.author}
-            onChange={handleChange}
-            required
-            className="border border-gray-300 p-2 rounded-md focus:ring-2 focus:ring-blue-500 outline-none"
-          />
-          <input
-            type="text"
-            name="isbn"
-            placeholder="ISBN"
-            value={formData.isbn}
-            onChange={handleChange}
-            required
-            className="border border-gray-300 p-2 rounded-md focus:ring-2 focus:ring-blue-500 outline-none"
-          />
-          <input
-            type="text"
-            name="category"
-            placeholder="Category"
-            value={formData.category}
-            onChange={handleChange}
-            required
-            className="border border-gray-300 p-2 rounded-md focus:ring-2 focus:ring-blue-500 outline-none"
-          />
-          <input
-            type="number"
-            name="quantity"
-            placeholder="Quantity"
-            min="1"
-            value={formData.quantity}
-            onChange={handleChange}
-            required
-            className="border border-gray-300 p-2 rounded-md focus:ring-2 focus:ring-blue-500 outline-none"
-          />
-        </div>
+      <BookFilter
+        search={search}
+        setSearch={setSearch}
+        category={category}
+        setCategory={setCategory}
+      />
 
-        <div className="flex gap-3 justify-end mt-3">
-          <button
-            type="submit"
-            disabled={loading}
-            className={`px-5 py-2 text-white rounded-md transition font-semibold ${
-              editId
-                ? "bg-yellow-500 hover:bg-yellow-600"
-                : "bg-blue-600 hover:bg-blue-700"
-            }`}
-          >
-            {loading
-              ? "Saving..."
-              : editId
-              ? "Update Book ✏️"
-              : "Add Book ➕"}
-          </button>
-          {editId && (
-            <button
-              type="button"
-              onClick={handleCancelEdit}
-              className="px-5 py-2 bg-gray-400 text-white rounded-md hover:bg-gray-500"
-            >
-              Cancel
-            </button>
+      {/* 🔹 ADMIN VIEW */}
+      {user?.role === "admin" ? (
+        <>
+          <BookForm refreshBooks={fetchBooks} />
+          <BookTable books={filteredBooks} refreshBooks={fetchBooks} />
+        </>
+      ) : (
+        /* 🔹 USER VIEW */
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+          {loading ? (
+            <p className="text-gray-500">Loading...</p>
+          ) : filteredBooks.length > 0 ? (
+            filteredBooks.map((book) => (
+              <BookCard
+                key={book.book_id}
+                book={book}
+                onBorrow={handleBorrow}
+                status={getBorrowStatus(book.book_id)}
+              />
+            ))
+          ) : (
+            <p className="text-gray-500 col-span-full text-center">
+              No books found.
+            </p>
           )}
         </div>
-      </form>
-
-      {/* Book List */}
-      <div className="bg-white shadow-lg rounded-lg border border-gray-100 overflow-x-auto">
-        {loading ? (
-          <p className="text-center p-6 text-gray-500">Loading...</p>
-        ) : books.length > 0 ? (
-          <table className="w-full border-collapse">
-            <thead className="bg-blue-100 text-blue-800">
-              <tr>
-                <th className="p-3 border text-left">#</th>
-                <th className="p-3 border text-left">Title</th>
-                <th className="p-3 border text-left">Author</th>
-                <th className="p-3 border text-left">ISBN</th>
-                <th className="p-3 border text-left">Category</th>
-                <th className="p-3 border text-center">Qty</th>
-                <th className="p-3 border text-center">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {books.map((book, index) => (
-                <tr
-                  key={book.book_id || book.id}
-                  className="hover:bg-gray-50 transition-all"
-                >
-                  <td className="p-3 border">{index + 1}</td>
-                  <td className="p-3 border font-semibold">{book.title}</td>
-                  <td className="p-3 border">{book.author}</td>
-                  <td className="p-3 border">{book.isbn}</td>
-                  <td className="p-3 border">{book.category}</td>
-                  <td className="p-3 border text-center">{book.quantity}</td>
-                  <td className="p-3 border text-center">
-                    <button
-                      onClick={() => handleEdit(book)}
-                      className="text-yellow-600 hover:text-yellow-700 font-semibold mr-3"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => handleDelete(book.book_id || book.id)}
-                      className="text-red-600 hover:text-red-700 font-semibold"
-                    >
-                      Delete
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        ) : (
-          <p className="text-center text-gray-500 py-6">No books found.</p>
-        )}
-      </div>
+      )}
     </div>
   );
-};
-
-export default Books;
+}

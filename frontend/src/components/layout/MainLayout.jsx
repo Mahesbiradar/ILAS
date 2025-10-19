@@ -1,9 +1,19 @@
 import React, { useState } from "react";
-import { Outlet, Link } from "react-router-dom";
+import { Outlet, Link, useNavigate } from "react-router-dom";
 import { Menu, X, BookOpen, LayoutDashboard } from "lucide-react";
+import { useAuth } from "../context/AuthProvider";
+import toast from "react-hot-toast";
 
 export default function MainLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    logout(); // call logout from context
+    toast.success("Logged out successfully!");
+    navigate("/login");
+  };
 
   return (
     <div className="flex min-h-screen bg-gray-50 text-gray-800">
@@ -93,9 +103,20 @@ export default function MainLayout() {
               Innovative Library Automation System
             </h2>
           </div>
-          <button className="px-3 py-1 bg-blue-600 text-white rounded-md hover:bg-blue-700 shadow-sm transition-colors">
-            Logout
-          </button>
+
+          <div className="flex items-center gap-3">
+            {user && (
+              <span className="text-sm text-gray-700 font-medium">
+                {user.username} ({user.role || "user"})
+              </span>
+            )}
+            <button
+              onClick={handleLogout}
+              className="px-3 py-1 bg-blue-600 text-white rounded-md hover:bg-blue-700 shadow-sm transition-colors"
+            >
+              Logout
+            </button>
+          </div>
         </header>
 
         {/* Page Content */}

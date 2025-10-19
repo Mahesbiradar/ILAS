@@ -22,4 +22,3 @@ urlpatterns = [
     path('api/auth/', include('accounts.urls')),
     path('api/', include('library.urls')),  # ✅ add this line
 ]
-

@@ -48,6 +48,8 @@ INSTALLED_APPS = [
     'accounts',
 ]
 
+AUTH_USER_MODEL = 'accounts.User'
+
 MIDDLEWARE = [
      'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
@@ -60,14 +62,13 @@ MIDDLEWARE = [
 ]
 
 ROOT_URLCONF = 'ilas_backend.urls'
-
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ),
 }
 
-CORS_ALLOW_ALL_ORIGINS = True  # for local testing
+
 
 # JWT Settings (optional tweak)
 from datetime import timedelta
@@ -151,13 +152,15 @@ STATIC_URL = 'static/'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-CORS_ALLOW_ALL_ORIGINS = True
+
 
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",  # React app
     "http://127.0.0.1:5173",
 ]
 
-AUTH_USER_MODEL = 'accounts.User'
+CORS_ALLOW_ALL_ORIGINS = True
+
+
 
 
