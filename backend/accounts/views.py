@@ -1,14 +1,26 @@
-from rest_framework import generics, status
+from rest_framework import generics, status, viewsets
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import AllowAny, IsAuthenticated, IsAdminUser
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate
+from rest_framework.decorators import action, api_view, permission_classes
+from django.http import HttpResponse
 
-from .models import User
-from .serializers import UserSerializer, RegisterSerializer, LoginSerializer
+from .models import User, MemberLog
+from .serializers import (
+    RegisterSerializer,
+    LoginSerializer,
+    UserSerializer,
+    MemberLogSerializer,
+)
+
+import csv
+import io
+from datetime import datetime
 
 
+# ✅ Helper to generate JWT tokens
 def get_tokens_for_user(user):
     refresh = RefreshToken.for_user(user)
     return {
@@ -29,23 +41,21 @@ class RegisterView(generics.CreateAPIView):
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
 
-        # Auto-login after signup
         tokens = get_tokens_for_user(user)
-        return Response({
-            "user": UserSerializer(user).data,
-            "tokens": tokens,
-            "message": "User registered successfully!"
-        }, status=status.HTTP_201_CREATED)
+        return Response(
+            {
+                "user": UserSerializer(user).data,
+                "tokens": tokens,
+                "message": "User registered successfully!",
+            },
+            status=status.HTTP_201_CREATED,
+        )
 
 
 # 🔹 LOGIN VIEW (Enhanced for Admin/Superusers)
 class LoginView(APIView):
-    """
-    Handles user login for both normal and admin users.
-    Allows login using either username or email.
-    """
     permission_classes = [AllowAny]
-    authentication_classes = []  # Disable JWTAuth for login
+    authentication_classes = []
 
     def post(self, request):
         username_or_email = request.data.get("username") or request.data.get("email")
@@ -57,10 +67,8 @@ class LoginView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Try username first
         user = authenticate(request, username=username_or_email, password=password)
 
-        # Try email if username fails
         if user is None:
             try:
                 found_user = User.objects.filter(email__iexact=username_or_email).first()
@@ -69,7 +77,6 @@ class LoginView(APIView):
             except Exception:
                 pass
 
-        # Validation checks
         if user is None:
             return Response(
                 {"detail": "Invalid username/email or password."},
@@ -82,12 +89,10 @@ class LoginView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        # Ensure admins/superusers can log in
         if user.is_superuser and not user.role:
             user.role = "admin"
             user.save(update_fields=["role"])
 
-        # Everything valid — issue tokens
         tokens = get_tokens_for_user(user)
         return Response(
             {
@@ -119,3 +124,124 @@ class UserDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = User.objects.all()
     serializer_class = UserSerializer
     permission_classes = [IsAdminUser]
+
+
+# 🧩 Admin Member Management (ViewSet)
+class MemberViewSet(viewsets.ModelViewSet):
+    queryset = User.objects.all().order_by("-id")
+    permission_classes = [AllowAny]  # You can change to IsAdminUser later
+
+    def get_serializer_class(self):
+        if self.action == "create":
+            return RegisterSerializer
+        return UserSerializer
+
+    def perform_create(self, serializer):
+        member = serializer.save()
+        MemberLog.objects.create(
+            member=member.username,
+            action="added",
+            performed_by=self.request.user.username
+            if self.request.user.is_authenticated
+            else "system",
+        )
+
+    def perform_update(self, serializer):
+        member = serializer.save()
+        MemberLog.objects.create(
+            member=member.username,
+            action="edited",
+            performed_by=self.request.user.username
+            if self.request.user.is_authenticated
+            else "system",
+        )
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        if instance.is_logged_in:
+            return Response(
+                {"error": "Cannot delete a logged-in user."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        MemberLog.objects.create(
+            member=instance.username,
+            action="deleted",
+            performed_by=self.request.user.username
+            if self.request.user.is_authenticated
+            else "system",
+        )
+        self.perform_destroy(instance)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=True, methods=["post"])
+    def promote(self, request, pk=None):
+        member = self.get_object()
+        role_order = ["user", "librarian", "admin"]
+        try:
+            next_role = role_order[role_order.index(member.role) + 1]
+        except (ValueError, IndexError):
+            next_role = "admin"
+
+        member.role = next_role
+        member.save()
+
+        MemberLog.objects.create(
+            member=member.username,
+            action="promoted",
+            performed_by=request.user.username
+            if request.user.is_authenticated
+            else "system",
+        )
+        return Response(UserSerializer(member).data)
+
+
+# 🧾 Logs Endpoint (JSON for frontend)
+@api_view(["GET"])
+@permission_classes([IsAdminUser])
+def member_logs(request):
+    logs = MemberLog.objects.all().order_by("-timestamp")
+    serializer = MemberLogSerializer(logs, many=True)
+    return Response(serializer.data)
+
+
+# 📤 Export Logs Endpoint (CSV with optional date filter)
+@api_view(["GET"])
+@permission_classes([IsAdminUser])
+def export_member_logs(request):
+    start_date = request.query_params.get("start")
+    end_date = request.query_params.get("end")
+
+    logs = MemberLog.objects.all().order_by("-timestamp")
+
+    if start_date and end_date:
+        try:
+            start = datetime.strptime(start_date, "%Y-%m-%d")
+            end = datetime.strptime(end_date, "%Y-%m-%d")
+            logs = logs.filter(timestamp__date__range=(start, end))
+        except ValueError:
+            return Response(
+                {"error": "Invalid date format (YYYY-MM-DD required)."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["Member", "Action", "Performed By", "Timestamp"])
+
+    for log in logs:
+        writer.writerow(
+            [
+                log.member,
+                log.action,
+                log.performed_by,
+                log.timestamp.strftime("%Y-%m-%d %H:%M:%S"),
+            ]
+        )
+
+    csv_data = output.getvalue()
+    output.close()
+
+    response = HttpResponse(csv_data, content_type="text/csv")
+    filename = f"member_logs_{start_date or 'all'}_{end_date or 'all'}.csv"
+    response["Content-Disposition"] = f"attachment; filename={filename}"
+    return response

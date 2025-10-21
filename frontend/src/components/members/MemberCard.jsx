@@ -3,19 +3,13 @@ import React from "react";
 
 export default function MemberCard({ member }) {
   return (
-    <div className="border rounded-lg p-4 shadow-sm bg-white hover:shadow-md transition">
-      <h3 className="font-semibold text-blue-700">{member.username}</h3>
-      <p className="text-gray-600 text-sm">{member.email}</p>
-      <p className="text-gray-500 text-sm">
-        Role:{" "}
-        <span
-          className={`font-medium ${
-            member.role === "admin" ? "text-purple-600" : "text-green-600"
-          }`}
-        >
-          {member.role}
-        </span>
+    <div className="p-4 bg-white border border-gray-100 rounded-xl shadow-sm hover:shadow-md transition-all text-center">
+      <h3 className="font-semibold text-gray-800">{member.username}</h3>
+      <p className="text-sm text-gray-500">{member.email}</p>
+      <p className="text-sm text-blue-600 font-medium mt-1 capitalize">
+        {member.role}
       </p>
+      <p className="text-xs text-gray-400 mt-1">USN: {member.usn}</p>
     </div>
   );
 }

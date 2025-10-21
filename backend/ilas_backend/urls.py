@@ -1,24 +1,16 @@
-"""
-URL configuration for ilas_backend project.
-
-The `urlpatterns` list routes URLs to views. For more information please see:
-    https://docs.djangoproject.com/en/5.2/topics/http/urls/
-Examples:
-Function views
-    1. Add an import:  from my_app import views
-    2. Add a URL to urlpatterns:  path('', views.home, name='home')
-Class-based views
-    1. Add an import:  from other_app.views import Home
-    2. Add a URL to urlpatterns:  path('', Home.as_view(), name='home')
-Including another URLconf
-    1. Import the include() function: from django.urls import include, path
-    2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
-"""
+# backend/ilas_backend/urls.py
 from django.contrib import admin
 from django.urls import path, include
 
 urlpatterns = [
-    path('admin/', admin.site.urls),
-    path('api/auth/', include('accounts.urls')),
-    path('api/', include('library.urls')),  # ✅ add this line
+    path("admin/", admin.site.urls),
+
+    # Keep login & register working as before
+    path("api/auth/", include("accounts.urls")),
+
+    # Mirror members endpoints under /api/members/ etc.
+    path("api/", include("accounts.urls")),
+
+    # Library routes
+    path("api/library/", include("library.urls")),
 ]
