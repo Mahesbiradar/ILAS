@@ -6,6 +6,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate
 from rest_framework.decorators import action, api_view, permission_classes
 from django.http import HttpResponse
+from .permissions import IsRealAdmin
 
 from .models import User, MemberLog
 from .serializers import (
@@ -183,6 +184,8 @@ class MemberViewSet(viewsets.ModelViewSet):
             next_role = "admin"
 
         member.role = next_role
+        if next_role == "admin":
+            member.is_staff = True  # ✅ Grant Django admin privileges
         member.save()
 
         MemberLog.objects.create(
@@ -197,7 +200,7 @@ class MemberViewSet(viewsets.ModelViewSet):
 
 # 🧾 Logs Endpoint (JSON for frontend)
 @api_view(["GET"])
-@permission_classes([IsAdminUser])
+@permission_classes([IsRealAdmin])
 def member_logs(request):
     logs = MemberLog.objects.all().order_by("-timestamp")
     serializer = MemberLogSerializer(logs, many=True)
@@ -206,7 +209,7 @@ def member_logs(request):
 
 # 📤 Export Logs Endpoint (CSV with optional date filter)
 @api_view(["GET"])
-@permission_classes([IsAdminUser])
+@permission_classes([IsRealAdmin])
 def export_member_logs(request):
     start_date = request.query_params.get("start")
     end_date = request.query_params.get("end")
@@ -245,3 +248,41 @@ def export_member_logs(request):
     filename = f"member_logs_{start_date or 'all'}_{end_date or 'all'}.csv"
     response["Content-Disposition"] = f"attachment; filename={filename}"
     return response
+
+@api_view(["GET"])
+@permission_classes([IsRealAdmin])
+def export_all_members(request):
+    """
+    Exports all registered members (users) as a CSV file.
+    """
+    users = User.objects.all().order_by("-id")
+    
+    if not users.exists():
+        return Response(
+            {"error": "No members found."},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["ID", "Username", "Email", "Phone", "USN", "Role", "Joined On"])
+
+    for user in users:
+        writer.writerow([
+            user.id,
+            user.username,
+            user.email,
+            user.phone or "",
+            user.usn or "",
+            user.role or "",
+            user.date_joined.strftime("%Y-%m-%d %H:%M:%S"),
+        ])
+
+    csv_data = output.getvalue()
+    output.close()
+
+    response = HttpResponse(csv_data, content_type="text/csv")
+    filename = f"all_members_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return response
+

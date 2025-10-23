@@ -1,10 +1,11 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenRefreshView
+
 from .views import (
     RegisterView, LoginView, UserProfileView,
     UserListView, UserDetailView,
-    MemberViewSet, member_logs, export_member_logs
+    MemberViewSet, member_logs, export_member_logs , export_all_members,
 )
 
 # Router for members ViewSet
@@ -25,6 +26,9 @@ urlpatterns = [
     # --- Custom member management routes (moved above router include) ---
     path("members/logs/", member_logs, name="member-logs"),
     path("members/export/", export_member_logs, name="export-member-logs"),
+    path("members/export/all/", export_all_members, name="export-all-members"),
+
+
 
     # --- Router ViewSet routes ---
     path("", include(router.urls)),
