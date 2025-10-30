@@ -10,6 +10,8 @@ import {
   LogOut,
   User,
   X,
+  BookCopy,
+  FileText,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { useAuth } from "../../context/AuthProvider";
@@ -19,12 +21,19 @@ export default function Sidebar({ collapsed, onClose, user }) {
   const { logout } = useAuth();
   const navigate = useNavigate();
 
+  // ✅ Updated Nav Items
   const nav = [
     { to: "/home", label: "Home", icon: <Home size={18} /> },
     { to: "/dashboard", label: "Dashboard", icon: <LayoutDashboard size={18} /> },
     { to: "/books", label: "Books", icon: <BookOpen size={18} /> },
+
+    // 🛠️ Admin-only items
     { to: "/library-ops", label: "Library Ops", icon: <LibraryBig size={18} />, admin: true },
+    { to: "/books-manager", label: "All Books Manager", icon: <BookCopy size={18} />, admin: true },
+    { to: "/library-reports", label: "Library Reports", icon: <FileText size={18} />, admin: true },
     { to: "/members", label: "Members", icon: <Users size={18} />, admin: true },
+
+    // ℹ️ General
     { to: "/about", label: "About", icon: <Info size={18} /> },
   ];
 
@@ -35,7 +44,7 @@ export default function Sidebar({ collapsed, onClose, user }) {
       transition={{ type: "tween" }}
       className="fixed md:static top-0 left-0 h-full w-64 bg-white shadow-[2px_0_6px_rgba(0,0,0,0.05)] flex flex-col z-30"
     >
-      {/* ILAS Logo Header */}
+      {/* Header */}
       <div className="flex items-center justify-between h-[56px] px-5 bg-gradient-to-r from-blue-50 to-white shadow-[0_2px_6px_rgba(0,0,0,0.05)]">
         <Link to="/home" className="flex items-center gap-2">
           <BookOpen size={22} className="text-blue-600" />
@@ -77,7 +86,7 @@ export default function Sidebar({ collapsed, onClose, user }) {
         })}
       </nav>
 
-      {/* User Info */}
+      {/* User Info Section */}
       <div className="p-4 mt-auto border-t border-gray-100">
         <div className="flex items-center gap-3 mb-3">
           <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-semibold text-sm">

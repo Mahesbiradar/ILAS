@@ -1,6 +1,6 @@
 // src/components/layout/home/FeaturedBooks.jsx
 import React from "react";
-import BookCard from "../../books/BookCard";
+import BookCard from "../../library/BookCard";
 
 /**
  * Example featured books: replace with API call when backend ready.

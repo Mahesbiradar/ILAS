@@ -1,4 +1,3 @@
-// src/context/AuthProvider.jsx
 import React, { createContext, useContext, useState, useEffect } from "react";
 import api from "../api/axios";
 import toast from "react-hot-toast";
@@ -9,32 +8,42 @@ export const useAuth = () => useContext(AuthContext);
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => {
     try {
-      const u = localStorage.getItem("user");
-      return u ? JSON.parse(u) : null;
+      const stored = localStorage.getItem("user");
+      return stored ? JSON.parse(stored) : null;
     } catch {
       return null;
     }
   });
   const [loading, setLoading] = useState(true);
 
-  // Fetch current user if access token exists
+  /* ----------------------------------------------------------
+   🧠 Helper: Save user + tokens to localStorage
+  ---------------------------------------------------------- */
+  const saveAuthData = (user, tokens) => {
+    localStorage.setItem("access", tokens.access);
+    localStorage.setItem("refresh", tokens.refresh);
+    localStorage.setItem("user", JSON.stringify(user));
+    setUser(user);
+  };
+
+  /* ----------------------------------------------------------
+   🔐 Fetch current user if a valid token is present
+  ---------------------------------------------------------- */
   const fetchUser = async () => {
     const access = localStorage.getItem("access");
     if (!access) {
-      setLoading(false);
       setUser(null);
+      setLoading(false);
       return;
     }
+
     try {
       const res = await api.get("auth/me/");
       setUser(res.data);
       localStorage.setItem("user", JSON.stringify(res.data));
     } catch (err) {
-      console.warn("fetchUser failed", err.response?.data || err.message);
-      localStorage.removeItem("access");
-      localStorage.removeItem("refresh");
-      localStorage.removeItem("user");
-      setUser(null);
+      console.warn("fetchUser failed:", err.response?.data || err.message);
+      clearAuthData();
     } finally {
       setLoading(false);
     }
@@ -42,59 +51,104 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     fetchUser();
-    // eslint-disable-next-line
   }, []);
 
-  // Login
+  /* ----------------------------------------------------------
+   🚪 Login
+   Expected response format:
+   {
+     user: {...},
+     tokens: { access: "...", refresh: "..." }
+   }
+  ---------------------------------------------------------- */
   const login = async (credentials) => {
-    const res = await api.post("auth/login/", credentials);
-    // Expected format: { user, tokens: { access, refresh } }
-    const tokens = res.data.tokens || res.data;
-    const loggedUser = res.data.user;
-    const access = tokens?.access;
-    const refresh = tokens?.refresh;
-    if (!access || !refresh || !loggedUser) {
-      throw new Error("Invalid login response from server");
+    try {
+      const res = await api.post("auth/login/", credentials);
+      const user = res.data.user;
+      const tokens = res.data.tokens || res.data;
+      if (!user || !tokens?.access || !tokens?.refresh) {
+        throw new Error("Invalid login response from server");
+      }
+      saveAuthData(user, tokens);
+      toast.success(`Welcome back, ${user.username || "user"}!`);
+      return user;
+    } catch (err) {
+      console.error("Login error:", err.response?.data || err.message);
+      toast.error("Login failed. Please check your credentials.");
+      throw err;
     }
-    localStorage.setItem("access", access);
-    localStorage.setItem("refresh", refresh);
-    localStorage.setItem("user", JSON.stringify(loggedUser));
-    setUser(loggedUser);
-    return { user: loggedUser };
   };
 
-  // Signup
+  /* ----------------------------------------------------------
+   🧾 Signup
+   Backend should return: { user, tokens }
+  ---------------------------------------------------------- */
   const signup = async (payload) => {
-    const res = await api.post("auth/register/", payload);
-    // if backend returns tokens, store them and set user
-    if (res.data?.tokens) {
-      const { access, refresh } = res.data.tokens;
-      localStorage.setItem("access", access);
-      localStorage.setItem("refresh", refresh);
-      localStorage.setItem("user", JSON.stringify(res.data.user));
-      setUser(res.data.user);
-      toast.success("Account created & logged in");
-      return res.data.user;
-    } else {
-      toast.success("Account created, please login");
-      return null;
+    try {
+      const res = await api.post("auth/register/", payload);
+      if (res.data?.tokens && res.data?.user) {
+        saveAuthData(res.data.user, res.data.tokens);
+        toast.success("Account created & logged in");
+        return res.data.user;
+      } else {
+        toast.success("Account created. Please login manually.");
+        return null;
+      }
+    } catch (err) {
+      console.error("Signup failed:", err.response?.data || err.message);
+      toast.error("Signup failed. Try again.");
+      throw err;
     }
   };
 
-  // Logout
+  /* ----------------------------------------------------------
+   🚪 Logout — clears all localStorage tokens
+  ---------------------------------------------------------- */
   const logout = () => {
+    clearAuthData();
+    toast.success("Logged out successfully");
+  };
+
+  /* ----------------------------------------------------------
+   🧹 Helper: clear all auth data (used for logout or refresh failure)
+  ---------------------------------------------------------- */
+  const clearAuthData = () => {
     localStorage.removeItem("access");
     localStorage.removeItem("refresh");
     localStorage.removeItem("user");
     setUser(null);
-    toast.success("Logged out");
   };
+
+  /* ----------------------------------------------------------
+   🔁 Sync login/logout between tabs
+  ---------------------------------------------------------- */
+  useEffect(() => {
+    const syncLogout = (e) => {
+      if (e.key === "access" && !e.newValue) {
+        setUser(null);
+      }
+    };
+    window.addEventListener("storage", syncLogout);
+    return () => window.removeEventListener("storage", syncLogout);
+  }, []);
 
   return (
     <AuthContext.Provider
-      value={{ user, loading, login, signup, logout, fetchUser }}
+      value={{
+        user,
+        loading,
+        login,
+        signup,
+        logout,
+        fetchUser,
+        isAuthenticated: !!user,
+      }}
     >
-      {!loading ? children : <div className="p-8">Loading...</div>}
+      {!loading ? (
+        children
+      ) : (
+        <div className="p-8 text-center text-gray-600">Loading authentication...</div>
+      )}
     </AuthContext.Provider>
   );
 }

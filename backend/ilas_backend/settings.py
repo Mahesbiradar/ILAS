@@ -73,6 +73,12 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": (
        "rest_framework.permissions.IsAuthenticated",
     ),
+    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
+    "PAGE_SIZE": 10,  # you can tune this later
+    "DEFAULT_FILTER_BACKENDS": [
+        "rest_framework.filters.SearchFilter",
+        "rest_framework.filters.OrderingFilter",
+    ],
 }
 
 
@@ -176,7 +182,21 @@ CORS_ALLOW_ALL_ORIGINS = True
 
 CORS_EXPOSE_HEADERS = ["Content-Disposition"]  # Enables CSV file download from frontend
 
+# ----------------------------------------------------------
+# 📦 MEDIA FILE CONFIGURATION (for uploaded images & barcodes)
+# ----------------------------------------------------------
+import os
+
+MEDIA_URL = '/media/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+LIBRARY_BORROW_DAYS_DEFAULT = 14
+LIBRARY_FINE_PER_DAY = "1.00"
+LIBRARY_GRACE_DAYS = 0
+LIBRARY_MAX_FINE = None
+DEFAULT_BOOK_COVER = "defaults/default_book_cover.jpg"  # optional
 
 
 
 
+# Uncomment later if you move to cloud storage:
+# DEFAULT_FILE_STORAGE = "storages.backends.s3boto3.S3Boto3Storage"

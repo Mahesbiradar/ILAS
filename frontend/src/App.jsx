@@ -1,20 +1,23 @@
 import React from "react";
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import { Toaster } from "react-hot-toast";
 
 // 🧱 Layout
 import MainLayout from "./components/layout/MainLayout";
 
 // 📄 Pages
-import Home from "./pages/Home"; // Shared home page for user & admin
+import Home from "./pages/Home";
 import Dashboard from "./pages/Dashboard";
 import Books from "./pages/Books";
 import Members from "./pages/Members";
 import Login from "./pages/Login";
 import LibraryOps from "./pages/LibraryOps";
+import AllBooksManager from "./pages/AllBooksManager"; // ✅ New Page
+import LibraryReports from "./pages/LibraryReports";   // ✅ New Page
 import UserTransactions from "./pages/UserTransactions";
 import AdminTransactions from "./pages/AdminTransactions";
-import About from "./pages/About"; // optional About page
+import About from "./pages/About";
+import Unauthorized from "./pages/Unauthorized";
 
 // 🔐 Auth & Role Guards
 import { AuthProvider } from "./context/AuthProvider";
@@ -25,14 +28,17 @@ function App() {
   return (
     <Router>
       <AuthProvider>
+        <Toaster position="top-right" reverseOrder={false} />
+
         <Routes>
           {/* ==========================
               🔓 Public Routes
           =========================== */}
           <Route path="/login" element={<Login />} />
+          <Route path="/unauthorized" element={<Unauthorized />} />
 
           {/* ==========================
-              🔐 Protected Main Routes
+              🔐 Protected Routes
           =========================== */}
           <Route
             path="/"
@@ -42,10 +48,10 @@ function App() {
               </ProtectedRoute>
             }
           >
-            {/* ==========================
-                🏠 Common Home Page
-                (Admin, Librarian, User)
-            =========================== */}
+            {/* Redirect root to /home */}
+            <Route index element={<Navigate to="home" replace />} />
+
+            {/* Common Routes (All roles) */}
             <Route
               path="home"
               element={
@@ -54,10 +60,6 @@ function App() {
                 </RoleGuard>
               }
             />
-
-            {/* ==========================
-                📚 Common Books Page
-            =========================== */}
             <Route
               path="books"
               element={
@@ -66,10 +68,6 @@ function App() {
                 </RoleGuard>
               }
             />
-
-            {/* ==========================
-                🧭 Dashboard
-            =========================== */}
             <Route
               path="dashboard"
               element={
@@ -78,10 +76,16 @@ function App() {
                 </RoleGuard>
               }
             />
+            <Route
+              path="about"
+              element={
+                <RoleGuard allowedRoles={["user", "admin", "librarian"]}>
+                  <About />
+                </RoleGuard>
+              }
+            />
 
-            {/* ==========================
-                👥 Member Management (Admin + Librarian)
-            =========================== */}
+            {/* 👥 Members (Admin + Librarian) */}
             <Route
               path="members"
               element={
@@ -91,9 +95,7 @@ function App() {
               }
             />
 
-            {/* ==========================
-                💳 Transactions
-            =========================== */}
+            {/* 💳 Transactions */}
             <Route
               path="transactions/user"
               element={
@@ -111,9 +113,7 @@ function App() {
               }
             />
 
-            {/* ==========================
-                🛠️ Library Operations (Admin Only)
-            =========================== */}
+            {/* 🛠️ Library Management Tools (Admin Only) */}
             <Route
               path="library-ops"
               element={
@@ -123,14 +123,22 @@ function App() {
               }
             />
 
-            {/* ==========================
-                ℹ️ About Page
-            =========================== */}
+            {/* 📘 All Books Manager (Admin Only) */}
             <Route
-              path="about"
+              path="books-manager"
               element={
-                <RoleGuard allowedRoles={["user", "admin", "librarian"]}>
-                  <About />
+                <RoleGuard allowedRoles={["admin"]}>
+                  <AllBooksManager />
+                </RoleGuard>
+              }
+            />
+
+            {/* 📊 Reports Dashboard (Admin Only) */}
+            <Route
+              path="library-reports"
+              element={
+                <RoleGuard allowedRoles={["admin"]}>
+                  <LibraryReports />
                 </RoleGuard>
               }
             />
@@ -149,9 +157,6 @@ function App() {
             }
           />
         </Routes>
-
-        {/* 🔔 Toast Notifications */}
-        <Toaster position="top-right" reverseOrder={false} />
       </AuthProvider>
     </Router>
   );
