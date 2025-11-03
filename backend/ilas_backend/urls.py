@@ -2,6 +2,8 @@ from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
+from library.views_task_status import task_status_view
+
 
 urlpatterns = [
     # Admin
@@ -15,6 +17,8 @@ urlpatterns = [
 
     # Library routes
     path("api/library/", include("library.urls")),
+
+    path("api/tasks/status/<str:task_id>/", task_status_view, name="task-status"),
 ]
 
 # ✅ Serve uploaded images and barcodes during development

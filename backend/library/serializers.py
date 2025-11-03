@@ -8,8 +8,9 @@ User = get_user_model()
 
 
 class BookCopySerializer(serializers.ModelSerializer):
-    book_title = serializers.ReadOnlyField(source="book.title")
-    book_code = serializers.ReadOnlyField(source="book.book_code")
+    book_title = serializers.CharField(source="book.title", read_only=True)
+    book_code = serializers.CharField(source="book.book_code", read_only=True)
+    book_pk = serializers.IntegerField(source="book.id", read_only=True)
 
     class Meta:
         model = BookCopy
@@ -18,26 +19,33 @@ class BookCopySerializer(serializers.ModelSerializer):
             "copy_id",
             "barcode_value",
             "barcode_image",
-            "book",
-            "book_code",
-            "book_title",
-            "status",
             "condition",
+            "status",
             "location",
             "created_at",
+            "book",
+            "book_pk",
+            "book_title",
+            "book_code",
         ]
-        read_only_fields = ["copy_id", "barcode_value", "barcode_image", "created_at"]
+        read_only_fields = ["id", "copy_id", "barcode_value", "created_at", "book_pk", "book_title", "book_code"]
+
+    def validate(self, attrs):
+        # Only allow certain status values (reuse model choices)
+        status = attrs.get("status")
+        if status:
+            allowed = {choice[0] for choice in BookCopy._meta.get_field("status").choices}
+            if status not in allowed:
+                raise serializers.ValidationError({"status": f"Invalid status '{status}'. Allowed: {allowed}"})
+        return attrs
 
 
 class BookSerializer(serializers.ModelSerializer):
     copies = BookCopySerializer(many=True, read_only=True)
-    book_id = serializers.ReadOnlyField(source="book_code")
-
     class Meta:
         model = Book
         fields = [
             "id",
-            "book_id",
             "book_code",
             "title",
             "author",
@@ -46,23 +54,49 @@ class BookSerializer(serializers.ModelSerializer):
             "quantity",
             "cover_image",
             "added_date",
+            "is_active",
             "copies",
         ]
-        read_only_fields = ["id", "book_id", "book_code", "added_date"]
+        read_only_fields = ["id", "book_code", "added_date", "copies"]
+
+    def validate_quantity(self, value):
+        if value is None:
+            return 1
+        try:
+            v = int(value)
+            if v < 0:
+                raise serializers.ValidationError("quantity must be >= 0")
+            return v
+        except Exception:
+            raise serializers.ValidationError("quantity must be an integer")
 
     def create(self, validated_data):
-        # Book.save() will auto-create copies based on quantity
+        """Create a new book and its copies."""
+        qty = validated_data.get("quantity", 1)
         book = Book.objects.create(**validated_data)
+        for _ in range(qty):
+            BookCopy.objects.create(book=book)
         return book
 
     def update(self, instance, validated_data):
-        new_quantity = int(validated_data.get("quantity", instance.quantity))
+        """Safely update book and handle quantity changes."""
+        new_quantity = validated_data.get("quantity", instance.quantity)
         prev_quantity = instance.quantity
+
         instance = super().update(instance, validated_data)
-        # Add copies if quantity increased
+
+        # Adjust copies if quantity changes
         if new_quantity > prev_quantity:
-            for _ in range(new_quantity - prev_quantity):
+            diff = new_quantity - prev_quantity
+            for _ in range(diff):
                 BookCopy.objects.create(book=instance)
+        elif new_quantity < prev_quantity:
+            # delete extra copies (only available ones)
+            diff = prev_quantity - new_quantity
+            available_copies = instance.copies.filter(status="available")[:diff]
+            for c in available_copies:
+                c.delete()
+
         return instance
 
 

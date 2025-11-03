@@ -200,3 +200,31 @@ DEFAULT_BOOK_COVER = "defaults/default_book_cover.jpg"  # optional
 
 # Uncomment later if you move to cloud storage:
 # DEFAULT_FILE_STORAGE = "storages.backends.s3boto3.S3Boto3Storage"
+
+# -------------------------------------------------
+# ⚙️ Celery + Redis Configuration
+# -------------------------------------------------
+CELERY_BROKER_URL = "redis://127.0.0.1:6379/0"
+CELERY_RESULT_BACKEND = "redis://127.0.0.1:6379/0"
+CELERY_ACCEPT_CONTENT = ["json"]
+CELERY_TASK_SERIALIZER = "json"
+CELERY_RESULT_SERIALIZER = "json"
+CELERY_TIMEZONE = "Asia/Kolkata"
+CELERY_TASK_TRACK_STARTED = True
+CELERY_TASK_TIME_LIMIT = 30 * 60
+
+# ----------------------------------------------------------
+# Celery Beat Schedule (M5 periodic jobs)
+# ----------------------------------------------------------
+from celery.schedules import crontab
+
+CELERY_BEAT_SCHEDULE = {
+    "archive-old-transactions-weekly": {
+        "task": "library.tasks.archive_old_transactions",
+        "schedule": crontab(day_of_week="sun", hour=1, minute=0),
+    },
+    "cleanup-orphan-barcodes-weekly": {
+        "task": "library.tasks.cleanup_orphan_barcodes",
+        "schedule": crontab(day_of_week="sun", hour=2, minute=0),
+    },
+}

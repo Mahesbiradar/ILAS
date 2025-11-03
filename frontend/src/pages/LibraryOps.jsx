@@ -5,7 +5,7 @@ import Loader from "../components/common/Loader";
 import {
   getBooks,
   addBook,
-  updateBook,
+  editBook,
   deleteBook,
   scanBarcode,
 } from "../api/libraryApi";

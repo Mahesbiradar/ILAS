@@ -32,6 +32,7 @@ def _generate_barcode_content_file(barcode_value: str, book_title: str = ""):
         * ID line (large)
         * Book title line (large)
       - High resolution (300 DPI)
+    Returns django.core.files.base.ContentFile (PNG) or empty ContentFile on errors.
     """
     from django.core.files.base import ContentFile
 
@@ -60,25 +61,31 @@ def _generate_barcode_content_file(barcode_value: str, book_title: str = ""):
 
         draw = ImageDraw.Draw(new_img)
         try:
-            # large fonts (3x from earlier)
+            # large fonts (attempt truetype)
             font_id = ImageFont.truetype("arial.ttf", 52)
             font_title = ImageFont.truetype("arial.ttf", 46)
         except Exception:
-            # fallback if truetype not available
+            # fallback default (size may vary)
             font_id = ImageFont.load_default()
             font_title = ImageFont.load_default()
 
         # center ID
         id_text = barcode_value.strip()
-        id_width = draw.textlength(id_text, font=font_id)
-        id_x = max(0, (width - id_width) // 2)
+        try:
+            id_width = draw.textlength(id_text, font=font_id)
+        except Exception:
+            id_width = len(id_text) * 8
+        id_x = max(0, (width - int(id_width)) // 2)
         id_y = height + 10
         draw.text((id_x, id_y), id_text, fill="black", font=font_id)
 
         # center Title on next line
         title_text = (book_title or "").strip()
-        title_width = draw.textlength(title_text, font=font_title)
-        title_x = max(0, (width - title_width) // 2)
+        try:
+            title_width = draw.textlength(title_text, font=font_title)
+        except Exception:
+            title_width = len(title_text) * 7
+        title_x = max(0, (width - int(title_width)) // 2)
         title_y = id_y + 60
         draw.text((title_x, title_y), title_text, fill="black", font=font_title)
 
@@ -106,22 +113,26 @@ class Book(models.Model):
     quantity = models.PositiveIntegerField(default=1)
     cover_image = models.ImageField(upload_to="book_covers/", blank=True, null=True)
     added_date = models.DateTimeField(auto_now_add=True)
+    is_active = models.BooleanField(default=True)  # ✅ Soft delete flag
 
     class Meta:
         ordering = ["-added_date"]
 
+    def soft_delete(self):
+        """Soft delete: mark book inactive."""
+        self.is_active = False
+        self.save(update_fields=["is_active"])
+
     def save(self, *args, **kwargs):
-        is_new = self._state.adding
         super().save(*args, **kwargs)
-        # ensure book_code once id exists
         if not self.book_code:
             self.book_code = f"ILAS-ET-{self.id:04d}"
             super().save(update_fields=["book_code"])
 
         # create copies for new book by given quantity
-        if is_new:
-            for _ in range(self.quantity):
-                BookCopy.objects.create(book=self)
+        # if is_new:
+        #     for _ in range(self.quantity):
+        #         BookCopy.objects.create(book=self)
 
     def __str__(self):
         return f"{self.book_code} - {self.title}"
@@ -170,7 +181,26 @@ class BookCopy(models.Model):
                 content = _generate_barcode_content_file(self.barcode_value, self.book.title)
                 if content and getattr(content, "size", None) is not None and content.size > 0:
                     filename = f"{self.copy_id}.png"
-                    self.barcode_image.save(filename, content, save=True)
+
+                    # Try to optimize PNG using Pillow if available (reduce size), fallback to raw content
+                    try:
+                        if Image is not None:
+                            content.seek(0)
+                            img = Image.open(BytesIO(content.read()))
+                            out_buf = BytesIO()
+                            img.save(out_buf, format="PNG", optimize=True)
+                            out_buf.seek(0)
+                            self.barcode_image.save(filename, ContentFile(out_buf.read()), save=True)
+                        else:
+                            content.seek(0)
+                            self.barcode_image.save(filename, content, save=True)
+                    except Exception as e:
+                        # fallback raw
+                        try:
+                            content.seek(0)
+                            self.barcode_image.save(filename, content, save=True)
+                        except Exception as inner:
+                            print("Failed to save barcode (fallback):", inner)
             except Exception as e:
                 print("Barcode generation failed:", e)
 
@@ -255,3 +285,18 @@ class AuditLog(models.Model):
 
     def __str__(self):
         return f"{self.created_at} - {self.actor} - {self.action}"
+
+
+class TransactionArchive(models.Model):
+    """Archived transactions older than 6 months."""
+    user = models.ForeignKey(UserModel, on_delete=models.SET_NULL, null=True)
+    book_title = models.CharField(max_length=200)
+    type = models.CharField(max_length=20)
+    archived_at = models.DateTimeField(default=timezone.now)
+    original_id = models.PositiveIntegerField()
+
+    def __str__(self):
+        return f"Archived {self.book_title} ({self.type})"
+
+    class Meta:
+        ordering = ["-archived_at"]
