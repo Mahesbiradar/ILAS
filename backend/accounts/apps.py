@@ -14,3 +14,5 @@ class AccountsConfig(AppConfig):
 
     def ready(self):
         post_migrate.connect(fix_admin_roles_post_migrate, sender=self)
+
+

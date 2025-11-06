@@ -11,9 +11,9 @@ import Dashboard from "./pages/Dashboard";
 import Books from "./pages/Books";
 import Members from "./pages/Members";
 import Login from "./pages/Login";
-import LibraryOps from "./pages/LibraryOps";
+// import LibraryOps from "./pages/LibraryOps";
 import AllBooksManager from "./pages/AllBooksManager"; // ✅ New Page
-import LibraryReports from "./pages/LibraryReports";   // ✅ New Page
+// import LibraryReports from "./pages/LibraryReports";   // ✅ New Page
 import UserTransactions from "./pages/UserTransactions";
 import AdminTransactions from "./pages/AdminTransactions";
 import About from "./pages/About";
@@ -118,7 +118,7 @@ function App() {
               path="library-ops"
               element={
                 <RoleGuard allowedRoles={["admin"]}>
-                  <LibraryOps />
+                  {/* <LibraryOps /> */}
                 </RoleGuard>
               }
             />
@@ -138,7 +138,7 @@ function App() {
               path="library-reports"
               element={
                 <RoleGuard allowedRoles={["admin"]}>
-                  <LibraryReports />
+                  {/* <LibraryReports /> */}
                 </RoleGuard>
               }
             />

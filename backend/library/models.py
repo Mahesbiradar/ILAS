@@ -1,302 +1,248 @@
 # library/models.py
 import os
-from decimal import Decimal
-from io import BytesIO
+import uuid
+from typing import List, Optional
 
-from django.conf import settings
-from django.core.files.base import ContentFile
-from django.db import models
+from django.core.files.storage import default_storage
+from django.db import models, transaction
 from django.utils import timezone
 from django.contrib.auth import get_user_model
-
-# barcode / image libs (optional at runtime)
-try:
-    import barcode
-    from barcode.writer import ImageWriter
-    from PIL import Image, ImageDraw, ImageFont
-except Exception:
-    barcode = None
-    Image = None
 
 UserModel = get_user_model()
 
 
 # ----------------------------------------------------------------------
-# BARCODE GENERATION (Large readable centered text)
-# ----------------------------------------------------------------------
-def _generate_barcode_content_file(barcode_value: str, book_title: str = ""):
-    """
-    Print-ready barcode image:
-      - Code128 barcode (no built-in text)
-      - Two centered lines under barcode:
-        * ID line (large)
-        * Book title line (large)
-      - High resolution (300 DPI)
-    Returns django.core.files.base.ContentFile (PNG) or empty ContentFile on errors.
-    """
-    from django.core.files.base import ContentFile
-
-    try:
-        if not barcode or not Image:
-            return ContentFile(b"")
-
-        code128 = barcode.get("code128", barcode_value, writer=ImageWriter())
-        fp = BytesIO()
-        code128.write(fp, {
-            "module_height": 20.0,
-            "module_width": 0.45,
-            "quiet_zone": 6.0,
-            "font_size": 0,
-            "write_text": False
-        })
-        fp.seek(0)
-
-        img = Image.open(fp).convert("RGB")
-        width, height = img.size
-
-        # more vertical space to fit the two larger lines
-        extra_space = 130
-        new_img = Image.new("RGB", (width, height + extra_space), "white")
-        new_img.paste(img, (0, 0))
-
-        draw = ImageDraw.Draw(new_img)
-        try:
-            # large fonts (attempt truetype)
-            font_id = ImageFont.truetype("arial.ttf", 52)
-            font_title = ImageFont.truetype("arial.ttf", 46)
-        except Exception:
-            # fallback default (size may vary)
-            font_id = ImageFont.load_default()
-            font_title = ImageFont.load_default()
-
-        # center ID
-        id_text = barcode_value.strip()
-        try:
-            id_width = draw.textlength(id_text, font=font_id)
-        except Exception:
-            id_width = len(id_text) * 8
-        id_x = max(0, (width - int(id_width)) // 2)
-        id_y = height + 10
-        draw.text((id_x, id_y), id_text, fill="black", font=font_id)
-
-        # center Title on next line
-        title_text = (book_title or "").strip()
-        try:
-            title_width = draw.textlength(title_text, font=font_title)
-        except Exception:
-            title_width = len(title_text) * 7
-        title_x = max(0, (width - int(title_width)) // 2)
-        title_y = id_y + 60
-        draw.text((title_x, title_y), title_text, fill="black", font=font_title)
-
-        fp_out = BytesIO()
-        new_img.save(fp_out, format="PNG", dpi=(300, 300))
-        fp_out.seek(0)
-        return ContentFile(fp_out.read())
-
-    except Exception as e:
-        # do not crash, return empty content
-        print("Barcode generation error:", e)
-        return ContentFile(b"")
-
-
-# ----------------------------------------------------------------------
-# BOOK & COPY MODELS
+# BOOK MODEL
 # ----------------------------------------------------------------------
 class Book(models.Model):
+    """Main catalog book (metadata). Physical copies handled separately."""
     id = models.AutoField(primary_key=True)
+    uid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
     book_code = models.CharField(max_length=20, unique=True, editable=False)
+
+    # Bibliographic details
     title = models.CharField(max_length=300)
+    subtitle = models.CharField(max_length=300, blank=True, null=True)
     author = models.CharField(max_length=200, blank=True, null=True)
+    publisher = models.CharField(max_length=200, blank=True, null=True)
+    edition = models.CharField(max_length=100, blank=True, null=True)
+    publication_year = models.PositiveIntegerField(blank=True, null=True)
     isbn = models.CharField(max_length=64, blank=True, null=True)
     category = models.CharField(max_length=120, blank=True, null=True)
-    quantity = models.PositiveIntegerField(default=1)
+    language = models.CharField(max_length=50, blank=True, null=True, default="English")
+    keywords = models.TextField(blank=True, null=True)
+    description = models.TextField(blank=True, null=True)
+
+    # Inventory info
+    quantity = models.PositiveIntegerField(default=0)
+    shelf_location = models.CharField(max_length=200, blank=True, null=True)
+    condition = models.CharField(max_length=64, default="Good")
+    availability_status = models.CharField(max_length=50, default="Available")
+
+    # Financial / admin
+    book_cost = models.DecimalField(max_digits=8, decimal_places=2, blank=True, null=True)
+    vendor_name = models.CharField(max_length=100, blank=True, null=True)
+    source = models.CharField(max_length=100, blank=True, null=True)
+    accession_number = models.CharField(max_length=50, blank=True, null=True)
     cover_image = models.ImageField(upload_to="book_covers/", blank=True, null=True)
+
+    # Digital
+    storage_type = models.CharField(max_length=50, blank=True, null=True)
+    file_url = models.URLField(blank=True, null=True)
+    digital_identifier = models.CharField(max_length=100, blank=True, null=True)
+    format = models.CharField(max_length=50, blank=True, null=True)
+
+    # Cataloging
+    library_section = models.CharField(max_length=100, blank=True, null=True)
+    dewey_decimal = models.CharField(max_length=50, blank=True, null=True)
+    cataloger = models.CharField(max_length=100, blank=True, null=True)
+    remarks = models.TextField(blank=True, null=True)
+
+    # Metadata
     added_date = models.DateTimeField(auto_now_add=True)
-    is_active = models.BooleanField(default=True)  # ✅ Soft delete flag
+    updated_at = models.DateTimeField(auto_now=True)
+    is_active = models.BooleanField(default=True)
 
     class Meta:
         ordering = ["-added_date"]
-
-    def soft_delete(self):
-        """Soft delete: mark book inactive."""
-        self.is_active = False
-        self.save(update_fields=["is_active"])
-
-    def save(self, *args, **kwargs):
-        super().save(*args, **kwargs)
-        if not self.book_code:
-            self.book_code = f"ILAS-ET-{self.id:04d}"
-            super().save(update_fields=["book_code"])
-
-        # create copies for new book by given quantity
-        # if is_new:
-        #     for _ in range(self.quantity):
-        #         BookCopy.objects.create(book=self)
+        indexes = [
+            models.Index(fields=["isbn"]),
+            models.Index(fields=["title"]),
+            models.Index(fields=["category"]),
+        ]
 
     def __str__(self):
         return f"{self.book_code} - {self.title}"
 
-
-class BookCopy(models.Model):
-    book = models.ForeignKey(Book, related_name="copies", on_delete=models.CASCADE)
-    copy_id = models.CharField(max_length=30, unique=True, db_index=True)
-    barcode_value = models.CharField(max_length=40, unique=True, db_index=True)
-    barcode_image = models.ImageField(upload_to="barcodes/", blank=True, null=True)
-    condition = models.CharField(max_length=64, default="Good")
-    status = models.CharField(
-        max_length=32,
-        choices=[("available", "Available"), ("issued", "Issued"), ("lost", "Lost"), ("maintenance", "Maintenance")],
-        default="available",
-    )
-    location = models.CharField(max_length=128, blank=True, null=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        ordering = ["copy_id"]
-
     def save(self, *args, **kwargs):
         creating = self._state.adding
-        if creating:
-            # determine next sequential copy number for this book (3-digit)
-            existing = BookCopy.objects.filter(book=self.book).values_list("copy_id", flat=True)
-            max_num = 0
-            for cid in existing:
-                if "-C" in str(cid):
-                    try:
-                        num = int(cid.split("-C")[-1])
-                        max_num = max(max_num, num)
-                    except Exception:
-                        pass
-            next_num = max_num + 1
-            formatted = f"{next_num:03d}"
-            self.copy_id = f"{self.book.book_code}-C{formatted}"
-            self.barcode_value = self.copy_id
-
         super().save(*args, **kwargs)
+        if creating and not self.book_code:
+            self.book_code = f"ILAS-ET-{self.id:04d}"
+            super().save(update_fields=["book_code"])
+            # fallback: create copies if not exists
+            if not BookCopy.objects.filter(book=self).exists() and self.quantity > 0:
+                self.create_copies(self.quantity)
 
-        # generate barcode image (PNG) after first save
-        if creating and not self.barcode_image:
-            try:
-                content = _generate_barcode_content_file(self.barcode_value, self.book.title)
-                if content and getattr(content, "size", None) is not None and content.size > 0:
-                    filename = f"{self.copy_id}.png"
+    def soft_delete(self):
+        self.is_active = False
+        self.save(update_fields=["is_active"])
 
-                    # Try to optimize PNG using Pillow if available (reduce size), fallback to raw content
-                    try:
-                        if Image is not None:
-                            content.seek(0)
-                            img = Image.open(BytesIO(content.read()))
-                            out_buf = BytesIO()
-                            img.save(out_buf, format="PNG", optimize=True)
-                            out_buf.seek(0)
-                            self.barcode_image.save(filename, ContentFile(out_buf.read()), save=True)
-                        else:
-                            content.seek(0)
-                            self.barcode_image.save(filename, content, save=True)
-                    except Exception as e:
-                        # fallback raw
-                        try:
-                            content.seek(0)
-                            self.barcode_image.save(filename, content, save=True)
-                        except Exception as inner:
-                            print("Failed to save barcode (fallback):", inner)
-            except Exception as e:
-                print("Barcode generation failed:", e)
+    # --- Copy helpers ---
+    def get_next_copy_suffix(self) -> int:
+        last = BookCopy.objects.filter(book=self).order_by("-created_at").first()
+        if not last:
+            return 1
+        try:
+            part = last.copy_code.rsplit("-", 1)[-1]
+            return int(part) + 1
+        except Exception:
+            return BookCopy.objects.filter(book=self).count() + 1
 
-    def __str__(self):
-        return f"{self.copy_id} ({self.book.title})"
+    def build_copy_instances(self, copies: int = 1, start_index: Optional[int] = None) -> List["BookCopy"]:
+        if start_index is None:
+            start_index = self.get_next_copy_suffix()
+        instances = []
+        for i in range(copies):
+            suffix = f"{start_index + i:02d}"
+            copy_code = f"{self.book_code}-{suffix}"
+            instances.append(BookCopy(book=self, copy_code=copy_code))
+        return instances
+
+    def create_copies(self, copies: int = 1) -> List["BookCopy"]:
+        """
+        Create physical BookCopy instances for this Book.
+        Each copy:
+        - Inherits the book's shelf_location
+        - Defaults to condition='Good'
+        - Is created atomically and efficiently in bulk
+        Ensures that quantity matches exact number of physical copies.
+        """
+        if copies < 1:
+            return []
+
+        with transaction.atomic():
+            # Build and create BookCopy records
+            objs = self.build_copy_instances(copies)
+            for obj in objs:
+                obj.shelf_location = self.shelf_location or ""
+                obj.condition = obj.condition or "Good"
+
+            BookCopy.objects.bulk_create(objs)
+
+            # Set quantity to the exact total number of BookCopy objects
+            total_copies = BookCopy.objects.filter(book=self).count()
+            self._skip_audit = True
+            self.quantity = total_copies
+            self.save(update_fields=["quantity"])
+
+            # Return the newly created BookCopy instances (in correct order)
+            return list(
+                BookCopy.objects.filter(book=self)
+                .order_by("-created_at")[:copies][::-1]
+            )
+
+
+    def delete_with_assets(self):
+        """Delete a book and its assets (cover + copies)."""
+        with transaction.atomic():
+            BookCopy.objects.filter(book=self).delete()
+            if self.cover_image and getattr(self.cover_image, "name", None):
+                try:
+                    path = self.cover_image.name
+                    if default_storage.exists(path):
+                        default_storage.delete(path)
+                except Exception:
+                    pass
+            self.delete()
+
+    @property
+    def copies_count(self):
+        return BookCopy.objects.filter(book=self).count()
 
 
 # ----------------------------------------------------------------------
-# TRANSACTION & AUDIT LOG MODELS
+# BOOK COPY MODEL
 # ----------------------------------------------------------------------
-class Transaction(models.Model):
-    TYPE_ISSUE = "ISSUE"
-    TYPE_RETURN = "RETURN"
-    TYPE_RENEW = "RENEW"
-    TYPE_LOST = "LOST"
-    TYPE_FINE = "FINE_ADJUST"
-    STATUS_ACTIVE = "ACTIVE"
-    STATUS_COMPLETED = "COMPLETED"
+class BookCopy(models.Model):
+    STATUS_CHOICES = [
+        ("available", "Available"),
+        ("issued", "Issued"),
+        ("lost", "Lost"),
+        ("reserved", "Reserved"),
+        ("maintenance", "Maintenance"),
+    ]
 
     id = models.AutoField(primary_key=True)
-    book_copy = models.ForeignKey(BookCopy, related_name="transactions", on_delete=models.PROTECT)
-    user = models.ForeignKey(UserModel, related_name="transactions", on_delete=models.CASCADE)
-    type = models.CharField(max_length=16)
-    issued_at = models.DateTimeField(null=True, blank=True)
-    due_at = models.DateTimeField(null=True, blank=True)
-    returned_at = models.DateTimeField(null=True, blank=True)
-    status = models.CharField(max_length=16, default=STATUS_ACTIVE)
-    fine_amount = models.DecimalField(max_digits=9, decimal_places=2, default=Decimal("0.00"))
-    notes = models.TextField(blank=True, null=True)
-    created_by = models.ForeignKey(UserModel, null=True, blank=True, related_name="created_transactions", on_delete=models.SET_NULL)
+    book = models.ForeignKey(Book, on_delete=models.CASCADE, related_name="copies")
+    copy_code = models.CharField(max_length=64, unique=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="available")
+    shelf_location = models.CharField(max_length=128, blank=True)
+    condition = models.CharField(max_length=128, blank=True, default="Good")
+    purchase_date = models.DateField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-    def perform_return(self, actor=None, notes=None):
-        # simple return implementation
-        self.returned_at = timezone.now()
-        self.status = Transaction.STATUS_COMPLETED
-        if notes:
-            self.notes = (self.notes or "") + f"\nRETURN: {notes}"
-        # set book copy status to available
-        bc = self.book_copy
-        bc.status = "available"
-        bc.save()
-        self.save()
-
-    def perform_renew(self, additional_days=7, actor=None, notes=None):
-        if not self.due_at:
-            self.due_at = timezone.now()
-        self.due_at = self.due_at + timezone.timedelta(days=additional_days)
-        if notes:
-            self.notes = (self.notes or "") + f"\nRENEW: {notes}"
-        self.save()
-
-    def mark_lost(self, fine_amount=None, actor=None, notes=None):
-        self.status = Transaction.STATUS_COMPLETED
-        if isinstance(fine_amount, (int, float, Decimal, str)):
-            try:
-                self.fine_amount = Decimal(str(fine_amount))
-            except Exception:
-                pass
-        bc = self.book_copy
-        bc.status = "lost"
-        bc.save()
-        if notes:
-            self.notes = (self.notes or "") + f"\nLOST: {notes}"
-        self.save()
+    class Meta:
+        ordering = ["book", "copy_code"]
 
     def __str__(self):
-        return f"Txn {self.id} - {self.book_copy.copy_id} - {self.type}"
+        return f"{self.copy_code} ({self.book.book_code})"
+
+    def save(self, *args, **kwargs):
+        if not hasattr(self.book, "_skip_audit"):
+            self.book._skip_audit = True
+        super().save(*args, **kwargs)
+        # Auto-update book info (quantity, shelves)
+        try:
+            total = BookCopy.objects.filter(book=self.book).count()
+            shelves = BookCopy.objects.filter(book=self.book).values_list("shelf_location", flat=True)
+            unique = sorted({s for s in shelves if s})
+            self.book.quantity = total
+            self.book.shelf_location = ", ".join(unique) if unique else None
+            setattr(self.book, "_skip_audit", True)
+            self.book.save(update_fields=["quantity", "shelf_location"])
+            setattr(self.book, "_skip_audit", False)
+        except Exception as e:
+            print("BookCopy sync failed:", e)
+
+    def delete_with_assets(self):
+        """Delete a BookCopy and keep Book quantity in sync."""
+        self.delete()
 
 
+# ----------------------------------------------------------------------
+# AUDIT LOGS
+# ----------------------------------------------------------------------
 class AuditLog(models.Model):
-    actor = models.ForeignKey(UserModel, null=True, blank=True, on_delete=models.SET_NULL)
-    action = models.CharField(max_length=128)
-    target_type = models.CharField(max_length=64, blank=True, null=True)
-    target_id = models.CharField(max_length=128, blank=True, null=True)
-    payload = models.JSONField(blank=True, null=True)
+    actor = models.ForeignKey(
+        UserModel, null=True, blank=True, on_delete=models.SET_NULL, related_name="audit_logs"
+    )
+    action = models.CharField(max_length=100)
+    target_type = models.CharField(max_length=100)
+    target_id = models.CharField(max_length=100, null=True, blank=True)
+    source = models.CharField(max_length=50, default="system")  # NEW FIELD
+    payload = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
-    class Meta:
-        ordering = ["-created_at"]
-
     def __str__(self):
-        return f"{self.created_at} - {self.actor} - {self.action}"
+        actor = self.actor.username if self.actor else "System"
+        return f"[{self.action}] {self.target_type} ({self.target_id}) by {actor}"
 
 
+
+# ----------------------------------------------------------------------
+# TRANSACTION ARCHIVE
+# ----------------------------------------------------------------------
 class TransactionArchive(models.Model):
-    """Archived transactions older than 6 months."""
     user = models.ForeignKey(UserModel, on_delete=models.SET_NULL, null=True)
     book_title = models.CharField(max_length=200)
     type = models.CharField(max_length=20)
     archived_at = models.DateTimeField(default=timezone.now)
     original_id = models.PositiveIntegerField()
 
-    def __str__(self):
-        return f"Archived {self.book_title} ({self.type})"
-
     class Meta:
         ordering = ["-archived_at"]
+
+    def __str__(self):
+        return f"Archived {self.book_title} ({self.type})"

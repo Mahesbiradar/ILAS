@@ -1,0 +1,19 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+<h1>📚 Bulk Upload Books</h1>
+<form method="post" enctype="multipart/form-data">
+  {% csrf_token %}
+  <p><strong>Select Excel file:</strong></p>
+  <input type="file" name="file" accept=".xlsx,.xls" required><br><br>
+
+  <p><strong>(Optional)</strong> ZIP file with book cover images:</p>
+  <input type="file" name="images" accept=".zip"><br><br>
+
+  <input type="submit" value="Upload" class="default">
+</form>
+
+{% if template_download_url %}
+  <hr>
+  <p>📄 Need a sample Excel? <a href="{{ template_download_url }}">Download Template</a></p>
+{% endif %}
+{% endblock %}

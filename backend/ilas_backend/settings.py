@@ -50,6 +50,10 @@ INSTALLED_APPS = [
     'core',
     'library',
     'accounts',
+    'django_celery_results',
+    'django_celery_beat',  # optional, for scheduled tasks
+
+
 ]
 
 AUTH_USER_MODEL = 'accounts.User'
@@ -99,18 +103,20 @@ SIMPLE_JWT = {
 
 TEMPLATES = [
     {
-        'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
-        'APP_DIRS': True,
-        'OPTIONS': {
-            'context_processors': [
-                'django.template.context_processors.request',
-                'django.contrib.auth.context_processors.auth',
-                'django.contrib.messages.context_processors.messages',
+        "BACKEND": "django.template.backends.django.DjangoTemplates",
+        "DIRS": [BASE_DIR / "templates"],  # ✅ must include this line
+        "APP_DIRS": True,
+        "OPTIONS": {
+            "context_processors": [
+                "django.template.context_processors.debug",
+                "django.template.context_processors.request",
+                "django.contrib.auth.context_processors.auth",
+                "django.contrib.messages.context_processors.messages",
             ],
         },
     },
 ]
+
 
 WSGI_APPLICATION = 'ilas_backend.wsgi.application'
 

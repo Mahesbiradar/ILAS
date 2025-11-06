@@ -1,20 +1,24 @@
 # library/views_task_status.py
 from django.http import JsonResponse
-from django_celery_results.models import TaskResult
 from celery.result import AsyncResult
 
 def task_status_view(request, task_id):
     """
-    Returns the status and result (if ready) of a Celery task.
+    Returns real-time status of any Celery task (e.g., bulk upload, report generation, etc.).
     """
     try:
         result = AsyncResult(task_id)
         response_data = {
             "task_id": task_id,
             "status": result.status,
+            "successful": result.successful(),
+            "ready": result.ready(),
         }
         if result.ready():
-            response_data["result"] = result.result
+            try:
+                response_data["result"] = result.result
+            except Exception:
+                response_data["result"] = "Result unavailable or not serializable."
         return JsonResponse(response_data)
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=400)

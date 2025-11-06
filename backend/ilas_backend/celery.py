@@ -10,7 +10,7 @@ app = Celery('ilas_backend')
 app.config_from_object('django.conf:settings', namespace='CELERY')
 
 # Autodiscover all tasks.py files in installed apps
-app.autodiscover_tasks()
+app.autodiscover_tasks(lambda: os.environ.get("DJANGO_SETTINGS_MODULE") and [] )
 
 @app.task(bind=True)
 def debug_task(self):
