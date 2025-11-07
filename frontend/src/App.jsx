@@ -18,6 +18,7 @@ import UserTransactions from "./pages/UserTransactions";
 import AdminTransactions from "./pages/AdminTransactions";
 import About from "./pages/About";
 import Unauthorized from "./pages/Unauthorized";
+import Profile from "./pages/Profile";
 
 // 🔐 Auth & Role Guards
 import { AuthProvider } from "./context/AuthProvider";
@@ -55,7 +56,7 @@ function App() {
             <Route
               path="home"
               element={
-                <RoleGuard allowedRoles={["user", "admin", "librarian"]}>
+                <RoleGuard allowedRoles={["user", "admin", "librarian","student","teacher"]}>
                   <Home />
                 </RoleGuard>
               }
@@ -63,7 +64,7 @@ function App() {
             <Route
               path="books"
               element={
-                <RoleGuard allowedRoles={["user", "admin", "librarian"]}>
+                <RoleGuard allowedRoles={["user", "admin", "librarian","student","teacher"]}>
                   <Books />
                 </RoleGuard>
               }
@@ -71,7 +72,7 @@ function App() {
             <Route
               path="dashboard"
               element={
-                <RoleGuard allowedRoles={["user", "admin", "librarian"]}>
+                <RoleGuard allowedRoles={["user", "admin", "librarian","student","teacher"]}>
                   <Dashboard />
                 </RoleGuard>
               }
@@ -79,7 +80,7 @@ function App() {
             <Route
               path="about"
               element={
-                <RoleGuard allowedRoles={["user", "admin", "librarian"]}>
+                <RoleGuard allowedRoles={["user", "admin", "librarian","student","teacher"]}>
                   <About />
                 </RoleGuard>
               }
@@ -99,7 +100,7 @@ function App() {
             <Route
               path="transactions/user"
               element={
-                <RoleGuard allowedRoles={["user", "student"]}>
+                <RoleGuard allowedRoles={["user", "student", "teacher"]}>
                   <UserTransactions />
                 </RoleGuard>
               }
@@ -132,7 +133,14 @@ function App() {
                 </RoleGuard>
               }
             />
-
+            <Route
+              path="/profile"
+              element={
+                <ProtectedRoute roles={["admin", "student", "teacher"]}>
+                  <Profile />
+                </ProtectedRoute>
+              }
+            />
             {/* 📊 Reports Dashboard (Admin Only) */}
             <Route
               path="library-reports"

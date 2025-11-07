@@ -202,6 +202,40 @@ LIBRARY_MAX_FINE = None
 DEFAULT_BOOK_COVER = "defaults/default_book_cover.jpg"  # optional
 
 
+# ================================================================
+# 📧 EMAIL CONFIGURATION (DEV + PROD READY)
+# ================================================================
+import os
+
+# Environment variable to control mode (set this in Railway)
+ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
+
+if ENVIRONMENT == "production":
+    # ✅ Real email sending (using Gmail App Password)
+    # ================================
+# 📧 Gmail SMTP Configuration
+# ================================
+        EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+        EMAIL_HOST = "smtp.gmail.com"
+        EMAIL_PORT = 587
+        EMAIL_USE_TLS = True
+        EMAIL_HOST_USER = "ilasdrait@gmail.com"
+        EMAIL_HOST_PASSWORD = "vscy wddj apqh vdwk"
+        DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
+
+else:
+    # 🧪 Development mode (no real emails)
+    EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+    DEFAULT_FROM_EMAIL = "noreply@ilas.local"
+
+# Optional (good for debugging email sending)
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "handlers": {"console": {"class": "logging.StreamHandler"}},
+    "loggers": {"django.core.mail": {"handlers": ["console"], "level": "DEBUG"}},
+}
+
 
 
 # Uncomment later if you move to cloud storage:

@@ -1,31 +1,38 @@
+// src/pages/Login.jsx
 import React, { useState } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { useAuth } from "../context/AuthProvider";
 import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
-import { Mail, Lock, User, Phone, IdCard, BookOpen } from "lucide-react";
+import { Mail, Lock, User, Phone, BookOpen, Briefcase, IdCard } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import api from "../api/axios";
 
 export default function Login() {
   const [isSignup, setIsSignup] = useState(false);
   const [showForgot, setShowForgot] = useState(false);
+  const [otpStage, setOtpStage] = useState(false);
   const { login, signup } = useAuth();
   const navigate = useNavigate();
-  const {
-    register,
-    handleSubmit,
-    formState: { errors },
-    reset,
-  } = useForm();
+
+  const { register, handleSubmit, control, reset } = useForm({ defaultValues: { role: "student" } });
+  const watchRole = useWatch({ control, name: "role" });
 
   // 🔹 Handle Login / Signup
   const onSubmit = async (data) => {
     try {
       if (isSignup) {
         const payload = {
-          ...data,
-          role: "user", // Default role assignment
+          username: data.username,
+          email: data.email,
+          password: data.password,
           confirm_password: data.password,
+          role: data.role,
+          phone: data.phone || "",
+          unique_id: data.unique_id,
+          department: data.department || "",
+          year: data.role === "student" ? data.year || "" : null,
+          designation: data.role === "teacher" ? data.designation || "" : null,
         };
         await signup(payload);
         toast.success("Signup successful — please login.");
@@ -33,67 +40,80 @@ export default function Login() {
         reset();
       } else {
         const res = await login(data);
-        toast.success("Login successful!");
-        const role =
-          res?.user?.role ||
-          JSON.parse(localStorage.getItem("user"))?.role ||
-          "user";
-
-        // Role-based redirection
-        if (role === "admin" || role === "librarian") {
-          navigate("/home");
-        } else {
-          navigate("/home");
-        }
+        toast.success("Welcome back!");
+        navigate("/home");
       }
     } catch (err) {
-      console.error("Auth error", err.response?.data || err.message);
       const detail =
         err.response?.data?.detail ||
         Object.values(err.response?.data || {})[0];
-      toast.error(detail || "Authentication failed!");
+      toast.error(detail || "Something went wrong!");
     }
   };
 
-  // 🔹 Forgot Password (Demo)
+  // 🔹 Forgot Password via OTP
   const handleForgotPassword = async (e) => {
     e.preventDefault();
-    toast("📧 Password reset link sent (demo only)", {
-      icon: "📨",
-    });
-    setShowForgot(false);
+    const email = e.target.email.value;
+    if (!email) return toast.error("Enter your email");
+
+    try {
+      await api.post("auth/password/send-otp/", { email });
+      toast.success("OTP sent to your email!");
+      setOtpStage(true);
+    } catch {
+      toast.error("Failed to send OTP");
+    }
+  };
+
+  const handleResetPassword = async (e) => {
+    e.preventDefault();
+    const email = e.target.email.value;
+    const otp = e.target.otp.value;
+    const new_password = e.target.new_password.value;
+
+    try {
+      await api.post("auth/password/reset/", { email, otp, new_password });
+      toast.success("Password reset successful!");
+      setShowForgot(false);
+      setOtpStage(false);
+    } catch {
+      toast.error("Invalid or expired OTP");
+    }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-white to-blue-100 px-4">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-100 via-white to-teal-50 relative overflow-hidden">
+      {/* Background decorations */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-20 -left-20 w-72 h-72 bg-teal-300/30 rounded-full blur-3xl"></div>
+        <div className="absolute bottom-20 -right-20 w-80 h-80 bg-blue-400/20 rounded-full blur-3xl"></div>
+      </div>
+
+      {/* Form container */}
       <motion.div
-        initial={{ opacity: 0, y: 25 }}
+        initial={{ opacity: 0, y: 40 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4 }}
-        className="bg-white shadow-2xl rounded-2xl w-full max-w-md p-8 relative overflow-hidden"
+        transition={{ duration: 0.6 }}
+        className="relative z-10 backdrop-blur-xl bg-white/80 shadow-2xl border border-white/40 rounded-3xl p-10 w-full max-w-md"
       >
-        {/* 🔷 Logo & Title */}
-        <div className="flex flex-col items-center mb-6">
-          <motion.div
-            initial={{ scale: 0.9 }}
-            animate={{ scale: 1 }}
-            transition={{ duration: 0.4 }}
-            className="w-16 h-16 rounded-xl bg-gradient-to-br from-blue-600 to-teal-400 flex items-center justify-center mb-3 shadow-lg"
-          >
+        {/* Header */}
+        <div className="flex flex-col items-center mb-8 text-center">
+          <div className="w-16 h-16 bg-gradient-to-br from-blue-600 to-teal-400 rounded-2xl flex items-center justify-center shadow-lg mb-3">
             <BookOpen className="text-white" size={30} />
-          </motion.div>
-          <h1 className="text-2xl font-bold text-gray-800">ILAS</h1>
-          <p className="text-sm text-gray-500">Library Automation System</p>
+          </div>
+          <h1 className="text-3xl font-bold text-gray-800">ILAS</h1>
+          <p className="text-sm text-gray-500">Innovative Library Automation System</p>
         </div>
 
-        {/* 🟦 Tabs (Login / Signup) */}
-        <div className="flex bg-blue-50 p-1 rounded-xl mb-6">
+        {/* Tabs */}
+        <div className="flex bg-gray-100 p-1 rounded-xl mb-8 shadow-inner">
           <button
             onClick={() => setIsSignup(false)}
             className={`flex-1 py-2 rounded-lg font-medium transition-all ${
               !isSignup
                 ? "bg-white shadow text-blue-700"
-                : "text-blue-600 hover:text-blue-700"
+                : "text-gray-500 hover:text-blue-700"
             }`}
           >
             Login
@@ -103,178 +123,192 @@ export default function Login() {
             className={`flex-1 py-2 rounded-lg font-medium transition-all ${
               isSignup
                 ? "bg-white shadow text-blue-700"
-                : "text-blue-600 hover:text-blue-700"
+                : "text-gray-500 hover:text-blue-700"
             }`}
           >
             Sign Up
           </button>
         </div>
 
-        {/* ✨ Form Section (Fixed Height for Stability) */}
-        <div className="min-h-[380px]">
-          <AnimatePresence mode="wait">
-            <motion.form
-              key={isSignup ? "signup" : "login"}
-              onSubmit={handleSubmit(onSubmit)}
-              initial={{ opacity: 0, x: isSignup ? 40 : -40 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: isSignup ? -40 : 40 }}
-              transition={{ duration: 0.25 }}
-              className="space-y-4"
-            >
-              {/* Username */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Username
-                </label>
-                <div className="flex items-center gap-2 border border-gray-200 rounded-lg px-3 py-2 focus-within:ring-2 focus-within:ring-blue-200 transition-all">
-                  <User size={16} className="text-gray-400" />
-                  <input
-                    {...register("username", { required: true })}
-                    placeholder="Enter your username"
-                    className="w-full bg-transparent outline-none text-gray-700 placeholder-gray-400"
-                  />
-                </div>
-                {errors.username && (
-                  <p className="text-red-500 text-sm mt-1">
-                    Username is required
-                  </p>
-                )}
-              </div>
-
-              {/* Signup-only Fields */}
-              {isSignup && (
-                <>
-                  {/* Email */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Email
-                    </label>
-                    <div className="flex items-center gap-2 border border-gray-200 rounded-lg px-3 py-2 focus-within:ring-2 focus-within:ring-blue-200 transition-all">
-                      <Mail size={16} className="text-gray-400" />
-                      <input
-                        {...register("email", { required: true })}
-                        type="email"
-                        placeholder="Enter your email"
-                        className="w-full bg-transparent outline-none text-gray-700 placeholder-gray-400"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Phone */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Phone (optional)
-                    </label>
-                    <div className="flex items-center gap-2 border border-gray-200 rounded-lg px-3 py-2 focus-within:ring-2 focus-within:ring-blue-200 transition-all">
-                      <Phone size={16} className="text-gray-400" />
-                      <input
-                        {...register("phone")}
-                        placeholder="Enter phone number"
-                        className="w-full bg-transparent outline-none text-gray-700 placeholder-gray-400"
-                      />
-                    </div>
-                  </div>
-
-                  {/* USN */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      USN (optional)
-                    </label>
-                    <div className="flex items-center gap-2 border border-gray-200 rounded-lg px-3 py-2 focus-within:ring-2 focus-within:ring-blue-200 transition-all">
-                      <IdCard size={16} className="text-gray-400" />
-                      <input
-                        {...register("usn")}
-                        placeholder="Enter USN"
-                        className="w-full bg-transparent outline-none text-gray-700 placeholder-gray-400"
-                      />
-                    </div>
-                  </div>
-                </>
-              )}
-
-              {/* Password */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Password
-                </label>
-                <div className="flex items-center gap-2 border border-gray-200 rounded-lg px-3 py-2 focus-within:ring-2 focus-within:ring-blue-200 transition-all">
-                  <Lock size={16} className="text-gray-400" />
-                  <input
-                    {...register("password", { required: true, minLength: 6 })}
-                    type="password"
-                    placeholder="Enter your password"
-                    className="w-full bg-transparent outline-none text-gray-700 placeholder-gray-400"
-                  />
-                </div>
-              </div>
-
-              {/* Forgot Password Link */}
-              {!isSignup && (
-                <div className="text-right text-sm">
-                  <button
-                    type="button"
-                    onClick={() => setShowForgot(true)}
-                    className="text-blue-600 hover:underline"
-                  >
-                    Forgot password?
-                  </button>
-                </div>
-              )}
-
-              {/* Submit Button */}
-              <motion.button
-                type="submit"
-                whileTap={{ scale: 0.97 }}
-                className="w-full bg-gradient-to-r from-blue-600 to-teal-400 text-white p-3 rounded-lg font-semibold hover:opacity-95 transition-all shadow-md"
-              >
-                {isSignup ? "Create Account" : "Login"}
-              </motion.button>
-            </motion.form>
-          </AnimatePresence>
-        </div>
-
-        {/* Footer (Login ↔ Signup Toggle) */}
-        <p className="text-center mt-5 text-gray-600 text-sm">
-          {isSignup ? "Already have an account?" : "New user?"}{" "}
-          <button
-            onClick={() => setIsSignup(!isSignup)}
-            className="text-blue-600 font-medium hover:underline"
+        {/* Form */}
+        <AnimatePresence mode="wait">
+          <motion.form
+            key={isSignup ? "signup" : "login"}
+            onSubmit={handleSubmit(onSubmit)}
+            initial={{ opacity: 0, x: isSignup ? 40 : -40 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: isSignup ? -40 : 40 }}
+            transition={{ duration: 0.3 }}
+            className="space-y-5"
           >
-            {isSignup ? "Login" : "Sign up"}
-          </button>
-        </p>
+            {/* Username */}
+            <div className="relative">
+              <User className="absolute left-3 top-3 text-gray-400" size={18} />
+              <input
+                {...register("username", { required: true })}
+                placeholder="Username"
+                className="w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-400 outline-none transition-all shadow-sm"
+              />
+            </div>
+
+            {isSignup && (
+              <>
+                {/* Role */}
+                <div>
+                  <select
+                    {...register("role", { required: true })}
+                    className="w-full border border-gray-300 p-2.5 rounded-xl focus:ring-2 focus:ring-blue-400 outline-none transition-all shadow-sm"
+                  >
+                    <option value="student">Student</option>
+                    <option value="teacher">Teacher</option>
+                  </select>
+                </div>
+
+                {/* Email */}
+                <div className="relative">
+                  <Mail className="absolute left-3 top-3 text-gray-400" size={18} />
+                  <input
+                    {...register("email", { required: true })}
+                    type="email"
+                    placeholder="Email address"
+                    className="w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-400 outline-none transition-all shadow-sm"
+                  />
+                </div>
+
+                {/* Department */}
+                <input
+                  {...register("department")}
+                  placeholder="Department"
+                  className="w-full border border-gray-300 p-2.5 rounded-xl focus:ring-2 focus:ring-blue-400 outline-none transition-all shadow-sm"
+                />
+
+                {/* Conditional fields */}
+                {watchRole === "student" && (
+                  <>
+                    <input
+                      {...register("unique_id", { required: true })}
+                      placeholder="USN (e.g., 1AT22ET001)"
+                      className="w-full border border-gray-300 p-2.5 rounded-xl focus:ring-2 focus:ring-blue-400 outline-none shadow-sm"
+                    />
+                    <input
+                      {...register("year")}
+                      placeholder="Year (e.g., 3rd Year)"
+                      className="w-full border border-gray-300 p-2.5 rounded-xl focus:ring-2 focus:ring-blue-400 outline-none shadow-sm"
+                    />
+                  </>
+                )}
+                {watchRole === "teacher" && (
+                  <>
+                    <input
+                      {...register("unique_id", { required: true })}
+                      placeholder="Employee ID"
+                      className="w-full border border-gray-300 p-2.5 rounded-xl focus:ring-2 focus:ring-blue-400 outline-none shadow-sm"
+                    />
+                    <input
+                      {...register("designation")}
+                      placeholder="Designation (e.g., Assistant Professor)"
+                      className="w-full border border-gray-300 p-2.5 rounded-xl focus:ring-2 focus:ring-blue-400 outline-none shadow-sm"
+                    />
+                  </>
+                )}
+
+                <div className="relative">
+                  <Phone className="absolute left-3 top-3 text-gray-400" size={18} />
+                  <input
+                    {...register("phone")}
+                    placeholder="Phone (optional)"
+                    className="w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-400 outline-none shadow-sm"
+                  />
+                </div>
+              </>
+            )}
+
+            {/* Password */}
+            <div className="relative">
+              <Lock className="absolute left-3 top-3 text-gray-400" size={18} />
+              <input
+                {...register("password", { required: true, minLength: 6 })}
+                type="password"
+                placeholder="Password"
+                className="w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-400 outline-none transition-all shadow-sm"
+              />
+            </div>
+
+            {!isSignup && (
+              <div className="text-right text-sm">
+                <button
+                  type="button"
+                  onClick={() => setShowForgot(true)}
+                  className="text-blue-600 hover:underline"
+                >
+                  Forgot password?
+                </button>
+              </div>
+            )}
+
+            <button
+              type="submit"
+              className="w-full bg-gradient-to-r from-blue-600 to-teal-400 text-white py-3 rounded-xl font-semibold shadow-md hover:opacity-95 transition-all"
+            >
+              {isSignup ? "Create Account" : "Login"}
+            </button>
+          </motion.form>
+        </AnimatePresence>
 
         {/* Forgot Password Modal */}
         {showForgot && (
-          <div className="absolute inset-0 bg-white/80 backdrop-blur-sm flex items-center justify-center rounded-2xl">
-            <div className="bg-white shadow-lg p-6 rounded-xl w-80">
-              <h2 className="text-lg font-semibold text-gray-700 mb-3">
-                Reset Password
-              </h2>
-              <form onSubmit={handleForgotPassword} className="space-y-3">
-                <input
-                  type="email"
-                  required
-                  placeholder="Enter your email"
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-200 outline-none"
-                />
-                <div className="flex gap-2">
-                  <button
-                    type="submit"
-                    className="flex-1 bg-blue-600 text-white py-2 rounded-lg font-medium hover:opacity-90"
-                  >
-                    Send Link
+          <div className="absolute inset-0 bg-white/90 flex items-center justify-center rounded-3xl">
+            <div className="bg-white shadow-xl p-6 rounded-2xl w-80">
+              {!otpStage ? (
+                <form onSubmit={handleForgotPassword} className="space-y-3">
+                  <h2 className="text-lg font-semibold text-gray-700 mb-3 text-center">Reset Password</h2>
+                  <input
+                    name="email"
+                    type="email"
+                    required
+                    placeholder="Enter your email"
+                    className="w-full border border-gray-300 rounded-xl px-3 py-2.5 focus:ring-2 focus:ring-blue-400 outline-none"
+                  />
+                  <button className="w-full bg-blue-600 text-white py-2.5 rounded-xl font-medium hover:opacity-95 transition-all">
+                    Send OTP
                   </button>
                   <button
                     type="button"
                     onClick={() => setShowForgot(false)}
-                    className="flex-1 bg-gray-200 text-gray-700 py-2 rounded-lg font-medium hover:bg-gray-300"
+                    className="w-full bg-gray-100 text-gray-700 py-2.5 rounded-xl mt-2 hover:bg-gray-200 transition-all"
                   >
                     Cancel
                   </button>
-                </div>
-              </form>
+                </form>
+              ) : (
+                <form onSubmit={handleResetPassword} className="space-y-3">
+                  <h2 className="text-lg font-semibold text-gray-700 mb-3 text-center">Enter OTP</h2>
+                  <input
+                    name="email"
+                    type="email"
+                    required
+                    placeholder="Email"
+                    className="w-full border border-gray-300 rounded-xl px-3 py-2.5 focus:ring-2 focus:ring-blue-400 outline-none"
+                  />
+                  <input
+                    name="otp"
+                    type="text"
+                    required
+                    placeholder="Enter 6-digit OTP"
+                    className="w-full border border-gray-300 rounded-xl px-3 py-2.5 focus:ring-2 focus:ring-blue-400 outline-none"
+                  />
+                  <input
+                    name="new_password"
+                    type="password"
+                    required
+                    placeholder="Enter new password"
+                    className="w-full border border-gray-300 rounded-xl px-3 py-2.5 focus:ring-2 focus:ring-blue-400 outline-none"
+                  />
+                  <button className="w-full bg-blue-600 text-white py-2.5 rounded-xl font-medium hover:opacity-95 transition-all">
+                    Reset Password
+                  </button>
+                </form>
+              )}
             </div>
           </div>
         )}

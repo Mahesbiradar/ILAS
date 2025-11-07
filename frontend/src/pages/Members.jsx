@@ -82,7 +82,7 @@ export default function Members() {
   };
 
   const filteredMembers = members.filter((m) =>
-    [m.username, m.email, m.role, m.usn]
+    [m.username, m.email, m.role, m.unique_id]
       .join(" ")
       .toLowerCase()
       .includes(search.toLowerCase())

@@ -1,11 +1,13 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenRefreshView
+from .views import send_reset_otp, reset_password  
+from .views import upload_profile_image, change_password
 
 from .views import (
     RegisterView, LoginView, UserProfileView,
     UserListView, UserDetailView,
-    MemberViewSet, member_logs, export_member_logs , export_all_members,
+    MemberViewSet, member_logs, export_member_logs , export_all_members, reset_password,
 )
 
 # Router for members ViewSet
@@ -27,6 +29,14 @@ urlpatterns = [
     path("members/logs/", member_logs, name="member-logs"),
     path("members/export/", export_member_logs, name="export-member-logs"),
     path("members/export/all/", export_all_members, name="export-all-members"),
+
+    # add these into your existing urlpatterns list
+    path("password/send-otp/", send_reset_otp, name="password-send-otp"),
+    path("password/reset/", reset_password, name="password-reset"),
+
+    path("me/upload/", upload_profile_image, name="upload-profile-image"),
+    path("me/change-password/", change_password, name="change-password"),
+
 
 
 

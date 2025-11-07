@@ -4,10 +4,14 @@ import { Navigate } from "react-router-dom";
 import { useAuth } from "../context/AuthProvider";
 import Loader from "../components/common/Loader";
 
-export default function RoleGuard({ allowedRoles = [], redirect = "/unauthorized", children }) {
+export default function RoleGuard({
+  allowedRoles = ["admin", "librarian", "student", "teacher", "user"],
+  redirect = "/unauthorized",
+  children,
+}) {
   const { user, loading } = useAuth();
 
-  // Still fetching auth → show loader
+  // Loading → show loader
   if (loading) return <Loader />;
 
   // Not logged in → go to login
@@ -16,12 +20,12 @@ export default function RoleGuard({ allowedRoles = [], redirect = "/unauthorized
     return <Navigate to="/login" replace />;
   }
 
-  // No role on user or not authorized → redirect
+  // Missing or unauthorized role
   if (!user.role || !allowedRoles.includes(user.role)) {
     console.warn(`🚫 RoleGuard: Access denied for role "${user.role}"`);
     return <Navigate to={redirect} replace />;
   }
 
-  // Authorized → render protected content
+  // ✅ Authorized
   return children;
 }
