@@ -1,167 +1,192 @@
-# library/signals.py
-import os
+"""
+ILAS v3 – Stable Signal Handlers (Non-Recursive, Audit-Safe)
+------------------------------------------------------------
+- Cleans up cover images
+- Resets ID sequence (dev only)
+- Creates AuditLog entries for Book and BookTransaction events
+- Uses a global re-entrancy guard to prevent recursive post_save loops
+- Skips audit when instance._suppress_audit is True
+"""
+
+import logging
 from django.db import connection
-from django.db.models.signals import post_delete, post_save
+from django.db.models.signals import post_save, post_delete, pre_delete
 from django.dispatch import receiver
 from django.core.files.storage import default_storage
 
-from .models import Book, BookCopy
-from .models import AuditLog
-from django.db.models.signals import post_save, post_delete
+from .models import Book, BookTransaction, AuditLog, create_audit
+
+logger = logging.getLogger(__name__)
+
+# ----------------------------------------------------------------------
+# Global audit re-entrancy guard
+# ----------------------------------------------------------------------
+_AUDIT_LOCK = False
 
 
-# ======================================================================
-# 🧹 FILE CLEANUP SIGNALS
-# ======================================================================
+# ----------------------------------------------------------------------
+# Clean up cover image file when a Book is deleted
+# ----------------------------------------------------------------------
 @receiver(post_delete, sender=Book)
-def delete_book_cover(sender, instance, **kwargs):
-    """Delete book cover image when a Book is deleted."""
-    if instance.cover_image and getattr(instance.cover_image, "name", None):
-        try:
-            path = instance.cover_image.name
+def cleanup_cover_image(sender, instance, **kwargs):
+    """Delete cover image when a Book is deleted."""
+    try:
+        cover = getattr(instance, "cover_image", None)
+        if cover and getattr(cover, "name", None):
+            path = cover.name
             if default_storage.exists(path):
                 default_storage.delete(path)
-                print(f"[SIGNAL] Deleted cover for {instance.book_code}")
-        except Exception:
-            pass
+    except Exception as e:
+        logger.warning("Cover cleanup failed for Book %s: %s", getattr(instance, "book_code", None), e)
 
 
-# ======================================================================
-# 🔁 BOOK ID SEQUENCE RESET (SQLite/PostgreSQL)
-# ======================================================================
+# ----------------------------------------------------------------------
+# Reset Book ID sequence (dev convenience)
+# ----------------------------------------------------------------------
 @receiver(post_delete, sender=Book)
 def reset_book_id_sequence(sender, instance, **kwargs):
-    """Reset auto-increment sequence when table is empty (for SQLite/PostgreSQL)."""
+    """If all books deleted, reset the auto-increment sequence."""
     try:
-        if Book.objects.count() == 0:
-            vendor = connection.vendor
-            with connection.cursor() as cursor:
-                if vendor == "sqlite":
-                    cursor.execute("DELETE FROM sqlite_sequence WHERE name=%s;", [Book._meta.db_table])
-                elif vendor == "postgresql":
-                    seq_name = f"{Book._meta.db_table}_id_seq"
-                    cursor.execute(f"ALTER SEQUENCE {seq_name} RESTART WITH 1;")
-            print("[SIGNAL] ✅ Reset book ID sequence")
-    except Exception:
-        pass
-
-
-# ======================================================================
-# 🔄 QUANTITY SYNCHRONIZATION SIGNALS
-# ======================================================================
-@receiver(post_save, sender=BookCopy)
-def sync_quantity_on_save(sender, instance, created, **kwargs):
-    """Ensure Book.quantity matches total copies after a copy is created or updated."""
-    try:
-        book = instance.book
-        new_count = book.copies.count()
-        if book.quantity != new_count:
-            book.quantity = new_count
-            book.save(update_fields=["quantity"])
-            print(f"[SIGNAL] 📘 Updated quantity for {book.book_code}: {new_count}")
+        if Book.objects.exists():
+            return
+        table = Book._meta.db_table
+        vendor = connection.vendor
+        with connection.cursor() as cursor:
+            if vendor == "sqlite":
+                cursor.execute("DELETE FROM sqlite_sequence WHERE name=%s;", [table])
+            elif vendor == "postgresql":
+                seq = f"{table}_id_seq"
+                cursor.execute(f"ALTER SEQUENCE {seq} RESTART WITH 1;")
     except Exception as e:
-        print(f"[SIGNAL] ⚠️ Quantity sync failed on save for {instance.copy_code}: {e}")
+        logger.debug("Book ID sequence reset skipped: %s", e)
 
 
-@receiver(post_delete, sender=BookCopy)
-def sync_quantity_on_delete(sender, instance, **kwargs):
-    """Ensure Book.quantity updates correctly when a copy is deleted."""
+# ----------------------------------------------------------------------
+# Prevent deleting a Book with active issue
+# ----------------------------------------------------------------------
+@receiver(pre_delete, sender=Book)
+def prevent_delete_if_active(sender, instance, **kwargs):
     try:
-        book = instance.book
-        remaining = book.copies.count()
-        if book.quantity != remaining:
-            book.quantity = remaining
-            book.save(update_fields=["quantity"])
-            print(f"[SIGNAL] 🧾 Updated quantity for {book.book_code}: {remaining}")
+        if BookTransaction.objects.filter(
+            book=instance, txn_type=BookTransaction.TYPE_ISSUE, is_active=True
+        ).exists():
+            raise Exception("Cannot delete book with active issue transaction.")
     except Exception as e:
-        print(f"[SIGNAL] ⚠️ Quantity sync failed on delete for {instance.copy_code}: {e}")
+        logger.exception("Prevented deletion of book %s: %s",
+                         getattr(instance, "book_code", instance.pk), e)
+        raise
 
 
-# ======================================================================
-# 🆔 AUTO-GENERATE COPY CODE ON MANUAL CREATION
-# ======================================================================
-@receiver(post_save, sender=BookCopy)
-def ensure_copy_code_exists(sender, instance, created, **kwargs):
+# ----------------------------------------------------------------------
+# Log BookTransaction create events
+# ----------------------------------------------------------------------
+@receiver(post_save, sender=BookTransaction)
+def log_transaction_activity(sender, instance, created, **kwargs):
+    """Create an audit record for new BookTransaction rows."""
+    try:
+        if not created:
+            return
+
+        actor = instance.actor or instance.member
+        if not actor:
+            return
+
+        # Map txn types to audit actions
+        action_map = {
+            "ISSUE": AuditLog.ACTION_BOOK_ISSUE,
+            "RETURN": AuditLog.ACTION_BOOK_RETURN,
+        }
+        action = action_map.get(instance.txn_type, AuditLog.ACTION_STATUS_CHANGE)
+
+        new_values = {
+            "book_code": getattr(instance.book, "book_code", None),
+            "txn_type": instance.txn_type,
+            "member": getattr(instance.member, "username", None),
+            "fine": str(instance.fine_amount) if instance.fine_amount else None,
+            "due_date": instance.due_date.isoformat() if instance.due_date else None,
+            "return_date": instance.return_date.isoformat() if instance.return_date else None,
+        }
+
+        create_audit(
+            actor=actor,
+            action=action,
+            target_type="BookTransaction",
+            target_id=str(instance.id),
+            new_values=new_values,
+            remarks=f"{instance.txn_type} transaction recorded",
+            source="transaction-system",
+        )
+    except Exception as e:
+        logger.exception("Audit creation failed for BookTransaction %s: %s",
+                         getattr(instance, "id", None), e)
+
+
+# ----------------------------------------------------------------------
+# Log Book create/edit events (admin + API)
+# ----------------------------------------------------------------------
+@receiver(post_save, sender=Book)
+def log_book_activity(sender, instance, created, **kwargs):
     """
-    Ensure a BookCopy created manually (e.g., from Admin) always gets a valid copy_code.
+    Log Book create/edit to AuditLog.
+    - Prevents recursive calls using _AUDIT_LOCK.
+    - Skips when instance._suppress_audit is True (bulk upload/admin internal).
     """
-    if not created:
-        return
-
+    global _AUDIT_LOCK
     try:
-        if not instance.copy_code or instance.copy_code.strip() == "":
-            book = instance.book
-            # Determine next available sequence for this book
-            last_copy = (
-                BookCopy.objects.filter(book=book)
-                .exclude(pk=instance.pk)
-                .order_by("-id")
-                .first()
-            )
-            next_index = 1
-            if last_copy and last_copy.copy_code:
-                try:
-                    parts = last_copy.copy_code.split("-")
-                    if parts[-1].isdigit():
-                        next_index = int(parts[-1]) + 1
-                except Exception:
-                    pass
-            # Format copy code as BOOKCODE-XX (two digits)
-            new_code = f"{book.book_code}-{next_index:02d}"
-            instance.copy_code = new_code
-            instance.save(update_fields=["copy_code"])
-            print(f"[SIGNAL] 🆕 Auto-generated copy code: {new_code}")
+        if _AUDIT_LOCK:
+            return
+
+        if getattr(instance, "_suppress_audit", False):
+            return
+
+        actor = getattr(instance, "last_modified_by", None)
+        if not actor:
+            return  # system update, skip
+
+        _AUDIT_LOCK = True
+
+        action = AuditLog.ACTION_BOOK_ADD if created else AuditLog.ACTION_BOOK_EDIT
+        remarks = "Book added" if created else "Book updated"
+
+        create_audit(
+            actor=actor,
+            action=action,
+            target_type="Book",
+            target_id=instance.book_code or str(instance.pk),
+            new_values={
+                "title": instance.title,
+                "isbn": instance.isbn,
+                "status": instance.status,
+            },
+            remarks=remarks,
+            source="admin-ui",
+        )
     except Exception as e:
-        print(f"[SIGNAL] ⚠️ Failed to generate copy code for BookCopy ID {instance.id}: {e}")
+        logger.exception("log_book_activity failed for Book %s: %s",
+                         getattr(instance, "book_code", None), e)
+    finally:
+        _AUDIT_LOCK = False
 
 
-# ======================================================================
-# 📜 AUDIT LOG SIGNALS (STABLE)
-# ======================================================================
-
-# def _get_target_id(instance):
-#     """Return human-readable ID for audit logs."""
-#     return getattr(instance, "book_code", None) or getattr(instance, "copy_code", None) or str(instance.pk)
-
-
-# @receiver(post_save)
-# def audit_log_save(sender, instance, created, **kwargs):
-#     """Only log CREATE events (skip updates and internal operations)."""
-#     if sender not in (Book, BookCopy):
-#         return
-
-#     # Skip flagged saves
-#     if getattr(instance, "_skip_audit", False):
-#         return
-
-#     # Only log explicit CREATE events
-#     if created:
-#         AuditLog.objects.create(
-#             actor=None,
-#             action=f"{sender.__name__.upper()}_CREATE",
-#             target_type=sender.__name__,
-#             target_id=_get_target_id(instance),
-#             source="signal",
-#             payload={},
-#         )
-
-
-# @receiver(post_delete)
-# def audit_log_delete(sender, instance, **kwargs):
-#     """Log deletes only if user-triggered (with _actor flag)."""
-#     if sender not in (Book, BookCopy):
-#         return
-
-#     user = getattr(instance, "_actor", None)
-#     if not user:
-#         # skip cascade deletions and system deletes
-#         return
-
-#     AuditLog.objects.create(
-#         actor=user if not getattr(user, "is_anonymous", True) else None,
-#         action=f"{sender.__name__.upper()}_DELETE",
-#         target_type=sender.__name__,
-#         target_id=_get_target_id(instance),
-#         source="admin-ui",
-#         payload={},
-#     )
+# ----------------------------------------------------------------------
+# Log Book deletion
+# ----------------------------------------------------------------------
+@receiver(post_delete, sender=Book)
+def log_book_delete(sender, instance, **kwargs):
+    """Log Book deletions to AuditLog."""
+    try:
+        actor = getattr(instance, "last_modified_by", None)
+        if not actor:
+            return
+        create_audit(
+            actor=actor,
+            action=AuditLog.ACTION_BOOK_DELETE,
+            target_type="Book",
+            target_id=instance.book_code or str(instance.pk),
+            old_values={"title": instance.title, "isbn": instance.isbn},
+            remarks="Book deleted",
+            source="admin-ui",
+        )
+    except Exception as e:
+        logger.exception("log_book_delete failed for Book %s: %s",
+                         getattr(instance, "book_code", None), e)

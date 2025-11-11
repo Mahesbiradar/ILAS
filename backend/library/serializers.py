@@ -1,226 +1,237 @@
 # library/serializers.py
-from rest_framework import serializers
+"""
+ILAS – Final DRF Serializers (Audit-Safe, Non-Recursive)
+--------------------------------------------------------
+• Book CRUD (status-safe)
+• BookTransaction validation (Issue / Return / Lost / Damaged / etc.)
+• AuditLog exposure
+• Bulk Book Import validation (Excel rows)
+• Fully aligned with corrected models, signals, and admin
+"""
+
+from decimal import Decimal
+from typing import Any, Dict, Optional
+
+from django.db import transaction
 from django.utils import timezone
-from django.contrib.auth import get_user_model
+from rest_framework import serializers
 
-from .models import Book, BookCopy, AuditLog
-
-User = get_user_model()
+from .models import Book, BookTransaction, AuditLog
 
 
-# ======================================================================
-# BOOK COPY SERIALIZER
-# ======================================================================
-class BookCopySerializer(serializers.ModelSerializer):
-    """Serializer for individual physical copies of a book."""
-
-    book_title = serializers.ReadOnlyField(source="book.title")
-    book_code = serializers.ReadOnlyField(source="book.book_code")
-
-    class Meta:
-        model = BookCopy
-        fields = [
-            "id", "book", "book_code", "book_title",
-            "copy_code", "status", "shelf_location",
-            "condition", "purchase_date",
-            "created_at", "updated_at",
-        ]
-        read_only_fields = [
-            "id", "book_code", "book_title", "copy_code",
-            "created_at", "updated_at",
-        ]
-
-    def validate_status(self, value):
-        if value not in dict(BookCopy.STATUS_CHOICES):
-            raise serializers.ValidationError("Invalid status.")
-        return value
-
-    def create(self, validated_data):
-        """Create a new BookCopy with automatic copy_code."""
-        book = validated_data.get("book")
-        copies = book.create_copies(1)
-        copy = copies[0]
-        # update editable fields
-        copy.status = validated_data.get("status", copy.status)
-        copy.shelf_location = validated_data.get("shelf_location", copy.shelf_location)
-        copy.condition = validated_data.get("condition", copy.condition)
-        copy.purchase_date = validated_data.get("purchase_date", copy.purchase_date)
-        copy.save()
-        return copy
-
-
-# ======================================================================
-# BOOK SERIALIZER (Main Book metadata)
-# ======================================================================
+# ----------------------------------------------------------------------
+#  Book Serializer
+# ----------------------------------------------------------------------
 class BookSerializer(serializers.ModelSerializer):
-    """Serializer for the Book model with copy-level integration."""
-
-    copies_count = serializers.SerializerMethodField()
-    copies = BookCopySerializer(many=True, read_only=True)
-
-    def get_copies_count(self, obj):
-        return obj.copies.count()
+    issued_to_name = serializers.ReadOnlyField(source="issued_to.username", default=None)
+    last_modified_by_name = serializers.ReadOnlyField(source="last_modified_by.username", default=None)
 
     class Meta:
         model = Book
         fields = [
-            # identifiers
             "id", "uid", "book_code",
-
-            # bibliographic
-            "title", "subtitle", "author", "publisher", "edition",
-            "publication_year", "isbn", "category", "language",
-            "keywords", "description",
-
-            # inventory / physical info
-            "quantity", "shelf_location", "condition", "availability_status",
-
-            # admin / finance
-            "book_cost", "vendor_name", "source", "accession_number", "cover_image",
-
-            # digital / electronic info
-            "storage_type", "file_url", "digital_identifier", "format",
-
-            # cataloging info
-            "library_section", "dewey_decimal", "cataloger", "remarks",
-
-            # system
-            "added_date", "updated_at", "is_active",
-
-            # copy information
-            "copies_count", "copies",
+            "title", "subtitle", "author", "publisher", "edition", "publication_year",
+            "isbn", "language", "category", "keywords", "description",
+            "accession_no", "shelf_location", "condition", "book_cost",
+            "vendor_name", "source", "library_section", "dewey_decimal",
+            "cataloger", "remarks", "cover_image",
+            "status", "issued_to", "issued_to_name",
+            "last_modified_by", "last_modified_by_name",
+            "created_at", "updated_at", "is_active",
         ]
         read_only_fields = [
-            "id", "uid", "book_code", "added_date", "updated_at",
-            "copies_count", "copies",
+            "id", "uid", "book_code",
+            "issued_to_name", "last_modified_by_name",
+            "created_at", "updated_at",
         ]
 
-    # ------------------------------------------------------------------
-    # Validation Helpers
-    # ------------------------------------------------------------------
-    def validate_quantity(self, value):
-        if value is None:
-            return 1
-        try:
-            value = int(value)
-            if value < 0:
-                raise serializers.ValidationError("Quantity must be >= 0")
-            return value
-        except Exception:
-            raise serializers.ValidationError("Quantity must be an integer")
-
-    def validate_publication_year(self, value):
-        if value and (value < 1500 or value > timezone.now().year + 1):
-            raise serializers.ValidationError("Invalid publication year.")
+    def validate_status(self, value):
+        valid = [k for k, _ in Book.STATUS_CHOICES]
+        if value not in valid:
+            raise serializers.ValidationError("Invalid status.")
         return value
 
-    def validate_isbn(self, value):
-        if not value:
-            return value
-        normalized = str(value).replace("-", "").strip()
-        qs = Book.objects.filter(isbn=normalized)
-        if self.instance:
-            qs = qs.exclude(pk=self.instance.pk)
-        if qs.exists():
-            raise serializers.ValidationError("ISBN already exists in another record.")
-        return normalized
-
-    def validate_book_cost(self, value):
-        if value is None:
-            return None
-        try:
-            value = round(float(value), 2)
-            if value < 0:
-                raise serializers.ValidationError("Book cost cannot be negative.")
-            return value
-        except Exception:
-            raise serializers.ValidationError("Invalid book cost format.")
-
-    # ------------------------------------------------------------------
-    # Creation / Update Logic
-    # ------------------------------------------------------------------
-    def create(self, validated_data):
-        """
-        Create a new Book with specified quantity.
-        After saving, create corresponding BookCopy entries.
-        """
-        quantity = validated_data.pop("quantity", 1)
-        book = Book.objects.create(**validated_data)
-        if quantity and quantity > 0:
-            book.create_copies(quantity)
-        return book
-
     def update(self, instance, validated_data):
-        """
-        Update metadata fields only.
-        Quantity changes are ignored during edit — handled by copy CRUD ops.
-        """
-        validated_data.pop("quantity", None)  # locked during edit
-        for attr, value in validated_data.items():
-            setattr(instance, attr, value)
-        instance.save()
-        return instance
+        # Prevent direct ISSUED status changes
+        if "status" in validated_data and validated_data["status"] == Book.STATUS_ISSUED:
+            raise serializers.ValidationError(
+                {"status": "Cannot manually set to ISSUED — use BookTransaction ISSUE instead."}
+            )
+
+        # Prevent edits when book is issued
+        if instance.status == Book.STATUS_ISSUED:
+            raise serializers.ValidationError("Cannot edit a book that is currently issued.")
+
+        return super().update(instance, validated_data)
 
 
-# ======================================================================
-# AUDIT LOG SERIALIZER
-# ======================================================================
+# ----------------------------------------------------------------------
+#  BookTransaction Serializer
+# ----------------------------------------------------------------------
+class BookTransactionSerializer(serializers.ModelSerializer):
+    member_name = serializers.ReadOnlyField(source="member.username")
+    actor_name = serializers.ReadOnlyField(source="actor.username", default=None)
+    book_code = serializers.ReadOnlyField(source="book.book_code")
+    book_title = serializers.ReadOnlyField(source="book.title")
+    book_status = serializers.ReadOnlyField(source="book.status")
+
+    class Meta:
+        model = BookTransaction
+        fields = [
+            "id", "book", "book_code", "book_title", "book_status",
+            "member", "member_name", "actor", "actor_name",
+            "txn_type", "issue_date", "due_date", "return_date",
+            "fine_amount", "remarks", "is_active",
+            "created_at", "updated_at",
+        ]
+        read_only_fields = [
+            "id", "book_code", "book_title", "book_status",
+            "member_name", "actor_name",
+            "issue_date", "due_date", "return_date",
+            "fine_amount", "created_at", "updated_at",
+        ]
+
+    def validate(self, attrs: Dict[str, Any]):
+        txn_type = attrs.get("txn_type")
+        book = attrs.get("book")
+        member = attrs.get("member")
+
+        if not book:
+            raise serializers.ValidationError({"book": "Book is required."})
+        if not member:
+            raise serializers.ValidationError({"member": "Member is required."})
+
+        # ISSUE validation
+        if txn_type == BookTransaction.TYPE_ISSUE:
+            if not book.can_be_issued():
+                raise serializers.ValidationError({"book": "Book is not available for issue."})
+            if BookTransaction.objects.filter(book=book, is_active=True, txn_type=BookTransaction.TYPE_ISSUE).exists():
+                raise serializers.ValidationError({"book": "This book already has an active issue."})
+
+        # RETURN validation
+        elif txn_type == BookTransaction.TYPE_RETURN:
+            active_issue = BookTransaction.objects.filter(
+                book=book, member=member, is_active=True, txn_type=BookTransaction.TYPE_ISSUE
+            ).first()
+            if not active_issue:
+                raise serializers.ValidationError({"txn_type": "No active ISSUE for this book and member."})
+
+        return attrs
+
+    def create(self, validated_data):
+        """Creates a BookTransaction respecting model logic and audit flow."""
+        request = self.context.get("request")
+        actor = None
+        if request and hasattr(request, "user"):
+            actor = request.user
+        validated_data["actor"] = actor
+
+        book = validated_data["book"]
+        txn_type = validated_data["txn_type"]
+        member = validated_data["member"]
+        remarks = validated_data.get("remarks", "")
+
+        with transaction.atomic():
+            if txn_type == BookTransaction.TYPE_ISSUE:
+                txn = book.mark_issued(member=member, actor=actor, remarks=remarks)
+            elif txn_type == BookTransaction.TYPE_RETURN:
+                txn = book.mark_returned(actor=actor, remarks=remarks)
+            elif txn_type in [
+                BookTransaction.TYPE_LOST,
+                BookTransaction.TYPE_DAMAGED,
+                BookTransaction.TYPE_MAINTENANCE,
+                BookTransaction.TYPE_REMOVED,
+            ]:
+                txn = book.mark_status(txn_type, actor=actor, remarks=remarks)
+            else:
+                raise serializers.ValidationError({"txn_type": "Invalid transaction type."})
+            return txn
+
+
+# ----------------------------------------------------------------------
+#  AuditLog Serializer
+# ----------------------------------------------------------------------
 class AuditLogSerializer(serializers.ModelSerializer):
-    actor = serializers.ReadOnlyField(source="actor.id")
+    actor_name = serializers.ReadOnlyField(source="actor.username", default=None)
 
     class Meta:
         model = AuditLog
-        fields = "__all__"
+        fields = [
+            "id", "actor", "actor_name", "action", "target_type", "target_id",
+            "old_values", "new_values", "remarks", "source", "timestamp",
+        ]
+        read_only_fields = ["id", "timestamp", "actor_name"]
 
 
-# ======================================================================
-# BULK IMPORT SERIALIZER (for Excel uploads)
-# ======================================================================
+# ----------------------------------------------------------------------
+#  Bulk Book Import Serializer
+# ----------------------------------------------------------------------
 class BulkBookImportSerializer(serializers.Serializer):
-    """Used internally for validating Excel/CSV import rows (full metadata)."""
+    """Validates each Excel row for bulk uploads."""
 
-    # --- Core Info ---
-    title = serializers.CharField(max_length=300)
+    # Required fields
+    title = serializers.CharField(max_length=400)
+    author = serializers.CharField(max_length=400)
+    isbn = serializers.CharField(max_length=64)
+    category = serializers.CharField(max_length=128)
+    shelf_location = serializers.CharField(max_length=128)
+
+    # Optional fields
     subtitle = serializers.CharField(required=False, allow_blank=True, allow_null=True)
-    author = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     publisher = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     edition = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     publication_year = serializers.IntegerField(required=False, allow_null=True)
-    isbn = serializers.CharField(required=False, allow_blank=True, allow_null=True)
-    language = serializers.CharField(required=False, allow_blank=True, allow_null=True)
-    category = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    language = serializers.CharField(required=False, allow_blank=True, allow_null=True, default="English")
     keywords = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     description = serializers.CharField(required=False, allow_blank=True, allow_null=True)
-
-    # --- Inventory ---
-    quantity = serializers.IntegerField(required=False, allow_null=True, default=1)
-    shelf_location = serializers.CharField(required=False, allow_blank=True, allow_null=True)
-    condition = serializers.CharField(required=False, allow_blank=True, allow_null=True)
-    availability_status = serializers.CharField(required=False, allow_blank=True, allow_null=True)
-
-    # --- Financial / Vendor Info ---
-    book_cost = serializers.DecimalField(
-        required=False, allow_null=True, max_digits=8, decimal_places=2
-    )
+    condition = serializers.CharField(required=False, allow_blank=True, allow_null=True, default="Good")
+    book_cost = serializers.DecimalField(required=False, max_digits=10, decimal_places=2, allow_null=True)
     vendor_name = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     source = serializers.CharField(required=False, allow_blank=True, allow_null=True)
-    accession_number = serializers.CharField(required=False, allow_blank=True, allow_null=True)
-    barcode_prefix = serializers.CharField(required=False, allow_blank=True, allow_null=True)
-
-    # --- Digital / Electronic Info ---
-    storage_type = serializers.CharField(required=False, allow_blank=True, allow_null=True)
-    file_url = serializers.CharField(required=False, allow_blank=True, allow_null=True)
-    digital_identifier = serializers.CharField(required=False, allow_blank=True, allow_null=True)
-    format = serializers.CharField(required=False, allow_blank=True, allow_null=True)
-    qr_code = serializers.CharField(required=False, allow_blank=True, allow_null=True)
-
-    # --- Cataloging Info ---
+    accession_no = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     library_section = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     dewey_decimal = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     cataloger = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     remarks = serializers.CharField(required=False, allow_blank=True, allow_null=True)
 
-    def validate(self, data):
-        if not data.get("title"):
-            raise serializers.ValidationError({"title": "Book title is required."})
-        return data
+    def validate(self, attrs):
+        """Normalize None → '' for all text fields."""
+        for field, value in attrs.items():
+            if value is None:
+                attrs[field] = ""
+        # Ensure required fields exist
+        if not attrs.get("title"):
+            raise serializers.ValidationError({"title": "Title is required."})
+        if not attrs.get("author"):
+            raise serializers.ValidationError({"author": "Author is required."})
+        if not attrs.get("isbn"):
+            raise serializers.ValidationError({"isbn": "ISBN is required."})
+        if not attrs.get("category"):
+            raise serializers.ValidationError({"category": "Category is required."})
+        if not attrs.get("shelf_location"):
+            raise serializers.ValidationError({"shelf_location": "Shelf location is required."})
+        return attrs
+
+
+    def validate_publication_year(self, value):
+        if value is None:
+            return value
+        try:
+            year = int(value)
+            if year < 0 or year > timezone.now().year:
+                raise serializers.ValidationError("Invalid publication year.")
+        except (TypeError, ValueError):
+            raise serializers.ValidationError("Invalid publication year.")
+        return year
+
+    def create_book_instance(self, validated_row: Dict[str, Any], created_by=None) -> Book:
+        """Create and return a Book instance from validated Excel row (audit-safe)."""
+        book_data = {k: v for k, v in validated_row.items() if v not in ("", None)}
+        if created_by:
+            book_data["last_modified_by"] = created_by
+
+        # Create instance without triggering post_save audits first
+        book = Book(**book_data)
+        book._suppress_audit = True  # mark before saving to skip per-row audits
+        book.save()
+        return book

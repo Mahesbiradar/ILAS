@@ -1,0 +1,18 @@
+{% extends "admin/change_list.html" %}
+{% load static %}
+
+{% block object-tools-items %}
+<li>
+  <a class="button" href="{% url 'admin:admin-issue-book' %}"
+     style="background:#1976D2;color:white;padding:6px 12px;border-radius:6px;">
+    📘 Issue Book
+  </a>
+</li>
+<li>
+  <a class="button" href="{% url 'admin:admin-return-book' %}"
+     style="background:#388E3C;color:white;padding:6px 12px;border-radius:6px;">
+    📗 Return Book
+  </a>
+</li>
+{{ block.super }}
+{% endblock %}

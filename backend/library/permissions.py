@@ -1,14 +1,15 @@
-# library/permissions.py
 from rest_framework import permissions
 
 
 class IsAdminOrReadOnly(permissions.BasePermission):
     """
     Read-only for unauthenticated/normal users. Write access for admin users.
-    Admin check uses is_staff/is_superuser or request.user.role == 'admin'.
+    Admin determination uses Django flags (is_staff/is_superuser) or a custom
+    'role' attribute on the user model (role == 'admin').
     """
 
     def has_permission(self, request, view):
+        # Safe methods always allowed
         if request.method in permissions.SAFE_METHODS:
             return True
 
@@ -16,12 +17,13 @@ class IsAdminOrReadOnly(permissions.BasePermission):
         if not user or not user.is_authenticated:
             return False
 
-        # Support common Django flags
+        # Django standard admin flags
         if getattr(user, "is_superuser", False) or getattr(user, "is_staff", False):
             return True
 
-        # Support custom user.role field if present
-        if getattr(user, "role", "").lower() == "admin":
+        # Optional custom role field
+        role = getattr(user, "role", None)
+        if isinstance(role, str) and role.lower() == "admin":
             return True
 
         return False

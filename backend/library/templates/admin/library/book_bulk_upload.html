@@ -1,0 +1,61 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block title %}Bulk Upload Books{% endblock %}
+
+{% block content %}
+<h1>📘 Bulk Upload Books</h1>
+
+<form method="post" enctype="multipart/form-data" style="background:#fafafa;padding:20px;border-radius:8px;">
+  {% csrf_token %}
+  <p>Upload an Excel file (.xlsx) with book data and optional ZIP file containing cover images.</p>
+
+  <div style="margin-bottom:15px;">
+    <label><strong>Excel File (.xlsx)</strong></label><br>
+    <input type="file" name="file" accept=".xlsx" required>
+  </div>
+
+  <div style="margin-bottom:15px;">
+    <label><strong>ZIP File (optional – cover images)</strong></label><br>
+    <input type="file" name="images" accept=".zip">
+  </div>
+
+  <div style="margin-top:20px;">
+    <button type="submit" class="button" 
+            style="background:#4CAF50;color:white;padding:8px 16px;border:none;border-radius:6px;">
+      Upload
+    </button>
+    <a href="../" class="button" 
+       style="margin-left:10px;background:#ccc;padding:8px 16px;border-radius:6px;color:black;text-decoration:none;">
+       Cancel
+    </a>
+  </div>
+
+  <p style="margin-top:15px;">
+    📂 Download Template:
+    <a href="{{ template_download_url }}" style="color:#007bff;text-decoration:underline;">
+      ILAS_Bulk_Template_v2.xlsx
+    </a>
+  </p>
+</form>
+
+{% if messages %}
+  <ul style="margin-top:25px;list-style:none;padding:0;">
+    {% for message in messages %}
+      {% if message.tags == 'error' %}
+        <li style="background:#ffe5e5;border-left:5px solid #ff4d4d;padding:10px;margin-bottom:8px;border-radius:5px;color:#a30000;">
+          ❌ {{ message }}
+        </li>
+      {% elif message.tags == 'warning' %}
+        <li style="background:#fff8e5;border-left:5px solid #ffcc00;padding:10px;margin-bottom:8px;border-radius:5px;color:#805900;">
+          ⚠️ {{ message }}
+        </li>
+      {% else %}
+        <li style="background:#e6ffed;border-left:5px solid #2ecc71;padding:10px;margin-bottom:8px;border-radius:5px;color:#006622;">
+          ✅ {{ message }}
+        </li>
+      {% endif %}
+    {% endfor %}
+  </ul>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,118 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block content %}
+<h2>📘 Issue Book</h2>
+<p style="font-size:14px;color:#555;">
+  Search and select a <strong>Book</strong> and <strong>Member</strong> to issue.
+</p>
+
+<form method="post" style="max-width:600px;margin-top:15px;">
+  {% csrf_token %}
+  <input type="hidden" name="book_id" id="bookId">
+  <input type="hidden" name="member_id" id="userId">
+
+  <!-- BOOK SEARCH -->
+  <div class="form-row">
+    <label><strong>Search Book:</strong></label>
+    <input type="text" id="bookSearch" class="vTextField" placeholder="Enter Book ID, Title, or ISBN..." autocomplete="off">
+    <ul id="bookResults" class="dropdown"></ul>
+  </div>
+
+  <div id="bookInfo" style="display:none;margin-top:10px;background:#f8f9fa;padding:10px;border-radius:6px;">
+    <p><b>Book Code:</b> <span id="bCode"></span></p>
+    <p><b>Title:</b> <span id="bTitle"></span></p>
+    <p><b>Status:</b> <span id="bStatus"></span></p>
+    <p><b>Shelf:</b> <span id="bShelf"></span></p>
+  </div>
+
+  <!-- MEMBER SEARCH -->
+  <div class="form-row" style="margin-top:20px;">
+    <label><strong>Search Member:</strong></label>
+    <input type="text" id="userSearch" class="vTextField" placeholder="Enter Name, Username, or Email..." autocomplete="off">
+    <ul id="userResults" class="dropdown"></ul>
+  </div>
+
+  <div id="userInfo" style="display:none;margin-top:10px;background:#f1f8e9;padding:10px;border-radius:6px;">
+    <p><b>Username:</b> <span id="uName"></span></p>
+    <p><b>Email:</b> <span id="uEmail"></span></p>
+  </div>
+
+  <div class="form-row" style="margin-top:20px;">
+    <label><strong>Remarks:</strong></label>
+    <textarea name="remarks" rows="2" class="vLargeTextField" placeholder="Optional remarks..."></textarea>
+  </div>
+
+  <div class="submit-row">
+    <input type="submit" value="Issue Book" class="default">
+    <a href="{% url 'admin:library_booktransaction_changelist' %}" class="button cancel-link">Cancel</a>
+  </div>
+</form>
+
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+  const bookSearch = document.getElementById("bookSearch");
+  const bookResults = document.getElementById("bookResults");
+  const userSearch = document.getElementById("userSearch");
+  const userResults = document.getElementById("userResults");
+
+  // --- Book Search ---
+  bookSearch.addEventListener("input", async () => {
+    const q = bookSearch.value.trim();
+    if (!q) return (bookResults.innerHTML = "");
+    const res = await fetch(`/library/admin/book-search/?q=${encodeURIComponent(q)}`);
+    const data = await res.json();
+    bookResults.innerHTML = data.map(
+      b => `<li class="search-item" data-id="${b.id}" data-code="${b.book_code}" data-title="${b.title}"
+             data-status="${b.status}" data-shelf="${b.shelf}">
+             ${b.book_code} — ${b.title} (${b.status})
+           </li>`
+    ).join("");
+  });
+
+  bookResults.addEventListener("click", (e) => {
+    if (e.target.classList.contains("search-item")) {
+      const d = e.target.dataset;
+      document.getElementById("bookId").value = d.id;
+      document.getElementById("bCode").textContent = d.code;
+      document.getElementById("bTitle").textContent = d.title;
+      document.getElementById("bStatus").textContent = d.status;
+      document.getElementById("bShelf").textContent = d.shelf;
+      document.getElementById("bookInfo").style.display = "block";
+      bookResults.innerHTML = "";
+    }
+  });
+
+  // --- User Search ---
+  userSearch.addEventListener("input", async () => {
+    const q = userSearch.value.trim();
+    if (!q) return (userResults.innerHTML = "");
+    const res = await fetch(`/library/admin/user-search/?q=${encodeURIComponent(q)}`);
+    const data = await res.json();
+    userResults.innerHTML = data.map(
+      u => `<li class="user-item" data-id="${u.id}" data-username="${u.username}" data-email="${u.email}">
+              ${u.username} — ${u.email}
+            </li>`
+    ).join("");
+  });
+
+  userResults.addEventListener("click", (e) => {
+    if (e.target.classList.contains("user-item")) {
+      const d = e.target.dataset;
+      document.getElementById("userId").value = d.id;
+      document.getElementById("uName").textContent = d.username;
+      document.getElementById("uEmail").textContent = d.email;
+      document.getElementById("userInfo").style.display = "block";
+      userResults.innerHTML = "";
+    }
+  });
+});
+</script>
+
+<style>
+.dropdown { list-style:none;margin:5px 0;border:1px solid #ccc;background:white;
+            position:absolute;width:450px;max-height:180px;overflow-y:auto;z-index:1000; }
+.dropdown li { padding:6px;cursor:pointer; }
+.dropdown li:hover { background:#e0f7fa; }
+</style>
+{% endblock %}

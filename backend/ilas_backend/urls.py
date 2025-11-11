@@ -13,7 +13,10 @@ urlpatterns = [
     path("api/auth/", include("accounts.urls")),
 
     # ✅ Library API routes (root-level for frontend compatibility)
-    path("api/", include("library.urls")),
+    path("", include("library.urls")),
+ 
+
+
 
     # ✅ Celery task status endpoint
     path("api/tasks/status/<str:task_id>/", task_status_view, name="task-status"),

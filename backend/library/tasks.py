@@ -1,88 +1,86 @@
-# library/tasks.py
+"""
+library/tasks.py
+
+Safe background task helpers for ILAS.
+- Works with Celery if available, otherwise falls back to synchronous execution.
+- Small helpers for task id and progress (cache-based).
+"""
+
 import uuid
 import traceback
-from datetime import timedelta
-from celery import shared_task
+from typing import Any, Callable, Dict
+
 from django.core.cache import cache
-from django.utils import timezone
+from django.conf import settings
 
-# No need to import BookCopy or barcode utilities now
-# from .models import BookCopy
+# Try import Celery's shared_task if Celery is installed.
+try:
+    from celery import shared_task  # type: ignore
+    CELERY_AVAILABLE = True
+except Exception:
+    shared_task = None  # type: ignore
+    CELERY_AVAILABLE = False
 
-# ======================================================================
-# 📊 GENERIC TASK ID + PROGRESS HELPERS
-# ======================================================================
-def create_task_id(prefix="TASK"):
-    """Generate a unique task identifier."""
+
+def create_task_id(prefix: str = "TASK") -> str:
+    """Generate a unique task id."""
     return f"{prefix}-{uuid.uuid4()}"
 
 
-def update_task_progress(task_id, progress, message="", status="IN_PROGRESS"):
-    """Update progress in Redis cache (1h timeout)."""
-    data = {"progress": progress, "status": status, "message": message}
+def update_task_progress(task_id: str, progress: int, message: str = "", status: str = "IN_PROGRESS") -> None:
+    """Store task progress in Django cache (useful for polled UI)."""
+    data = {"progress": int(progress), "status": status, "message": message}
     cache.set(task_id, data, timeout=3600)
-    print(f"[PROGRESS] {task_id}: {progress}% - {message}")
 
 
-def get_task_progress(task_id):
-    """Fetch task progress safely."""
+def get_task_progress(task_id: str) -> Dict[str, Any]:
+    """Retrieve progress data for a given task id (returns a default if none)."""
     return cache.get(task_id, {"progress": 0, "status": "PENDING", "message": ""})
 
 
-# ======================================================================
-# 🔍 REDIS / CELERY HEALTH CHECK
-# ======================================================================
-def is_redis_available():
-    """Check if Redis broker is reachable."""
-    try:
-        from redis import Redis
-        from django.conf import settings
-
-        client = Redis.from_url(
-            getattr(settings, "CELERY_BROKER_URL", "redis://127.0.0.1:6379/0")
-        )
-        client.ping()
-        return True
-    except Exception:
-        return False
+def is_celery_available() -> bool:
+    """Return whether Celery is importable and usable."""
+    return CELERY_AVAILABLE
 
 
-# ======================================================================
-# 🧠 SAFE CELERY CALL WRAPPER
-# ======================================================================
-def safe_celery_call(task_func, *args, **kwargs):
+def safe_celery_call(task_func: Callable[..., Any], *args, **kwargs) -> Dict[str, Any]:
     """
-    Dispatch Celery task if broker available, else run synchronously.
-    For bound Celery tasks (bind=True), use task_func.run for sync fallback.
+    Dispatch a Celery task if Celery available, otherwise run sync.
+    - If task_func is a Celery task (has .delay), call .delay
+    - On exception, fallback to running the function synchronously.
+    Returns a dict describing dispatch result or function return.
     """
+    task_name = getattr(task_func, "name", getattr(task_func, "__name__", str(task_func)))
     try:
-        task_func.delay(*args, **kwargs)
-        print(
-            f"[SAFE CELERY] ✅ Task sent asynchronously: {getattr(task_func, 'name', getattr(task_func, '__name__', str(task_func)))}"
-        )
-        return {"dispatched": True}
-    except Exception as e:
-        print(
-            f"[SAFE CELERY] ⚠️ Celery unavailable — running sync for {getattr(task_func, '__name__', getattr(task_func, 'name', str(task_func)))}: {e}"
-        )
+        if CELERY_AVAILABLE and hasattr(task_func, "delay"):
+            # call asynchronously
+            result = task_func.delay(*args, **kwargs)  # type: ignore
+            return {"dispatched": True, "task_id": getattr(result, "id", None)}
+        else:
+            # run sync
+            result = None
+            try:
+                # If it's a bound Celery task object with run method, call run
+                runner = getattr(task_func, "run", task_func)
+                result = runner(*args, **kwargs)
+            except TypeError:
+                result = task_func(*args, **kwargs)
+            return {"dispatched": False, "result": result}
+    except Exception as exc:
+        # fallback: run synchronously and capture exception
         try:
             runner = getattr(task_func, "run", task_func)
-            return runner(*args, **kwargs)
+            result = runner(*args, **kwargs)
+            return {"dispatched": False, "result": result}
         except Exception as inner:
-            print(f"[SAFE CELERY] ❌ Sync execution failed: {inner}")
             traceback.print_exc()
             return {"error": str(inner)}
 
 
-# ======================================================================
-# 🗂️ HOUSEKEEPING TASKS
-# ======================================================================
-@shared_task(name="archive_old_transactions")
-def archive_old_transactions():
-    """
-    Archive transactions older than 6 months (placeholder).
-    Extend this function once Transaction models are implemented.
-    """
-    six_months_ago = timezone.now() - timedelta(days=180)
-    print("[ARCHIVE] Placeholder — no active transaction model yet.")
-    return {"archived": 0}
+# Example Celery task (uncomment if you want to use Celery and register this)
+# if CELERY_AVAILABLE:
+#     @shared_task(name="library.generate_inventory_report")
+#     def generate_inventory_report():
+#         # Example task: compute inventory snapshot and save to a file or DB
+#         # Return a small result (status) for the demo
+#         return {"status": "ok"}

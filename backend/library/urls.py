@@ -1,55 +1,60 @@
 # library/urls.py
+"""
+ILAS Final – Library URL Configuration (Single-Book Model)
+----------------------------------------------------------
+Routes:
+- /books/                 → Book CRUD + search + bulk upload
+- /transactions/issue/    → Issue Book
+- /transactions/return/   → Return Book
+- /transactions/status/   → Lost/Damaged/Maintenance/Available
+- /reports/<type>/        → Master / Transaction / Inventory
+- /admin/*search/         → Admin AJAX book & user search, active transactions
+"""
+
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from . import views as library_views
 from .views import (
     BookViewSet,
-    BookCopyViewSet,
-    ReportViewSet,
-    AuditLogViewSet,
+    IssueBookAPIView,
+    ReturnBookAPIView,
+    UpdateBookStatusAPIView,
+    MasterReportView,
+    TransactionReportView,
+    InventoryReportView,
+    admin_search_books,
+    admin_search_users,
+    admin_active_transactions,
 )
 
-# ----------------------------------------------------------------------
-# 🔹 Router Registration
-# ----------------------------------------------------------------------
+# ----------------------------------------------------------
+# Router for Book CRUD and bulk upload
+# ----------------------------------------------------------
 router = DefaultRouter()
 router.register(r"books", BookViewSet, basename="book")
-router.register(r"bookcopies", BookCopyViewSet, basename="bookcopy")
-router.register(r"audit", AuditLogViewSet, basename="audit")
 
-# ----------------------------------------------------------------------
-# 🔹 URL Patterns
-# ----------------------------------------------------------------------
+# ----------------------------------------------------------
+# URL Patterns
+# ----------------------------------------------------------
 urlpatterns = [
-    # Default REST routes
+    # Core Book CRUD
     path("", include(router.urls)),
 
-    # ✅ Nested Route for Book → Copies
-    path(
-        "books/<str:book_code>/copies/",
-        BookCopyViewSet.as_view({"get": "list"}),
-        name="book-copies",
-    ),
+    # New modular apps
+    # path("api/", include("library.books.urls")),
+    # path("api/", include("library.transactions.urls")),
 
-    # ---------------- Reports ----------------
-    path(
-        "reports/books/",
-        ReportViewSet.as_view({"get": "books"}),
-        name="report-books",
-    ),
-    path(
-        "reports/summary/",
-        library_views.reports_summary,
-        name="reports-summary",
-    ),
+    # Transactions
+    path("transactions/issue/", IssueBookAPIView.as_view(), name="transaction-issue"),
+    path("transactions/return/", ReturnBookAPIView.as_view(), name="transaction-return"),
+    path("transactions/status/", UpdateBookStatusAPIView.as_view(), name="transaction-status"),
 
-    # ---------------- Analytics / Stats ----------------
-    path("stats/overview/", library_views.stats_overview, name="stats-overview"),
-    path("stats/category/", library_views.stats_category, name="stats-category"),
+    # Reports
+    path("reports/master/", MasterReportView.as_view(), name="report-master"),
+    path("reports/transactions/", TransactionReportView.as_view(), name="report-transactions"),
+    path("reports/inventory/", InventoryReportView.as_view(), name="report-inventory"),
 
-    path("reports/books/csv/", library_views.export_books_csv, name="report-books-csv"),
-    path("reports/inventory/summary/", library_views.export_inventory_summary, name="report-inventory-summary"),
-
+    # Admin AJAX Endpoints
+    path("admin/book-search/", admin_search_books, name="admin-book-search"),
+    path("admin/user-search/", admin_search_users, name="admin-user-search"),
+    path("admin/active-transactions/", admin_active_transactions, name="admin-active-transactions"),
 ]
-
-

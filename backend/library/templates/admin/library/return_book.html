@@ -1,0 +1,53 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block content %}
+<h2>📗 Return Book</h2>
+<p style="font-size:14px;color:#555;">Select an active transaction to mark as returned.</p>
+
+<table id="txnTable" class="admin-table" style="width:100%;margin-top:10px;border-collapse:collapse;">
+  <thead>
+    <tr style="background:#f1f1f1;">
+      <th>Book Code</th><th>Title</th><th>Member</th><th>Due Date</th><th>Action</th>
+    </tr>
+  </thead>
+  <tbody></tbody>
+</table>
+
+<form method="post" style="max-width:480px;margin-top:20px;">
+  {% csrf_token %}
+  <input type="hidden" name="book_id" id="bookId">
+  <div class="form-row">
+    <label><strong>Remarks:</strong></label>
+    <textarea name="remarks" rows="2" class="vLargeTextField" placeholder="Optional remarks..."></textarea>
+  </div>
+  <div class="submit-row">
+    <input type="submit" value="Return Book" class="default">
+    <a href="{% url 'admin:library_booktransaction_changelist' %}" class="button cancel-link">Cancel</a>
+  </div>
+</form>
+
+<script>
+async function loadActiveTransactions() {
+  const res = await fetch("/library/admin/active-transactions/");
+  const data = await res.json();
+  const tbody = document.querySelector("#txnTable tbody");
+  tbody.innerHTML = data.map(
+    txn => `<tr>
+      <td>${txn.book_code}</td>
+      <td>${txn.title}</td>
+      <td>${txn.member}</td>
+      <td>${txn.due_date || "-"}</td>
+      <td><button type="button" onclick="selectTxn('${txn.book_code}')">Select</button></td>
+    </tr>`
+  ).join("");
+}
+
+function selectTxn(code) {
+  document.getElementById("bookId").value = code;
+  alert(`Selected ${code} for return`);
+}
+
+loadActiveTransactions();
+</script>
+{% endblock %}
