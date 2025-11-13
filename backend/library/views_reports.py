@@ -1,4 +1,5 @@
 # library/views_reports.py
+from datetime import timedelta
 from decimal import Decimal
 from django.conf import settings
 from django.utils import timezone
@@ -8,13 +9,14 @@ from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from django.db import models
 
 from .models import Book, BookTransaction
+from .pagination import StandardResultsSetPagination, AdminResultsSetPagination
 
 
 class ActiveIssuesReport(APIView):
     permission_classes = [IsAdminUser]  # restrict to admin only
+    pagination_class = AdminResultsSetPagination
 
     def get(self, request):
-        limit = int(request.query_params.get("limit", 200))
         qs = (
             BookTransaction.objects.filter(
                 txn_type=BookTransaction.TYPE_ISSUE,
@@ -22,12 +24,14 @@ class ActiveIssuesReport(APIView):
                 book__is_active=True,
             )
             .select_related("book", "member")
-            .order_by("-issue_date")[:limit]
+            .order_by("-issue_date")
         )
 
+        paginator = self.pagination_class()
+        page = paginator.paginate_queryset(qs, request, view=self)
         today = timezone.now().date()
         data = []
-        for t in qs:
+        for t in page:
             due = t.due_date.date() if t.due_date else None
             days_overdue = max(0, (today - due).days) if due else 0
             data.append({
@@ -41,12 +45,13 @@ class ActiveIssuesReport(APIView):
                 "days_overdue": days_overdue,
                 "fine_accumulated": str(t.fine_amount or Decimal("0.00")),
             })
-        return Response(data)
+        return paginator.get_paginated_response(data)
 
 
 
 class OverdueReport(APIView):
     permission_classes = [IsAdminUser]
+    pagination_class = AdminResultsSetPagination
 
     def get(self, request):
         today = timezone.now().date()
@@ -65,11 +70,15 @@ class OverdueReport(APIView):
             .order_by("due_date")
         )
 
+        if min_days > 0:
+            cutoff = today - timedelta(days=min_days)
+            qs = qs.filter(due_date__lte=cutoff)
+
+        paginator = self.pagination_class()
+        page = paginator.paginate_queryset(qs, request, view=self)
         data = []
-        for t in qs:
+        for t in page:
             overdue_days = (today - t.due_date.date()).days
-            if overdue_days < min_days:
-                continue
             est_fine = fine_rate * Decimal(max(0, overdue_days - grace))
             data.append({
                 "transaction_id": t.id,
@@ -81,12 +90,13 @@ class OverdueReport(APIView):
                 "days_overdue": overdue_days,
                 "estimated_fine": str(est_fine),
             })
-        return Response(data)
+        return paginator.get_paginated_response(data)
 
 
 
 class MemberHistoryReport(APIView):
     permission_classes = [IsAuthenticated]
+    pagination_class = StandardResultsSetPagination
 
     def get(self, request, member_id):
         # Security: allow only same member or admin
@@ -99,8 +109,10 @@ class MemberHistoryReport(APIView):
             .order_by("-created_at")
         )
 
+        paginator = self.pagination_class()
+        page = paginator.paginate_queryset(qs, request, view=self)
         data = []
-        for t in qs:
+        for t in page:
             data.append({
                 "member_name": getattr(t.member, "username", None),
                 "book_code": getattr(t.book, "book_code", None),
@@ -112,7 +124,7 @@ class MemberHistoryReport(APIView):
                 "status_on_return": t.txn_type,
                 "remarks": t.remarks,
             })
-        return Response(data)
+        return paginator.get_paginated_response(data)
 
 
 from django.core.cache import cache

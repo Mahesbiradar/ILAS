@@ -156,6 +156,12 @@ class Book(models.Model):
     # Keep the pattern: auto-generate book_code after initial save using update() to avoid double-save signal recursion.
     def save(self, *args, **kwargs):
         creating = self.pk is None
+        if not creating and not hasattr(self, "_previous_state"):
+            self._previous_state = (
+                Book.objects.filter(pk=self.pk)
+                .values("title", "isbn", "status")
+                .first()
+            ) or {}
         # NOTE: callers may set _suppress_audit on the instance to avoid immediate audit creation by signals;
         # we do not force that flag here — it must be set by the caller when needed.
         super().save(*args, **kwargs)
@@ -330,6 +336,13 @@ class Book(models.Model):
 
         if self.status == self.STATUS_REMOVED:
             raise ValueError("Removed books cannot be reactivated or status-changed.")
+        active_issue = BookTransaction.objects.filter(
+            book=self,
+            txn_type=BookTransaction.TYPE_ISSUE,
+            is_active=True,
+        ).first()
+        if active_issue:
+            raise ValueError("Return the active issue before marking the book as lost/damaged/removed.")
 
         with transaction.atomic():
             self.status = new_status
@@ -414,5 +427,10 @@ class BookTransaction(models.Model):
         if self.pk:
             orig = BookTransaction.objects.filter(pk=self.pk).first()
             if orig and orig.fine_amount is not None and self.fine_amount != orig.fine_amount:
-                raise ValueError("Fine amount is immutable once set.")
+                # Allow the initial fine update that happens during return processing
+                if not (
+                    orig.fine_amount == Decimal("0.00")
+                    and orig.return_date is None
+                ):
+                    raise ValueError("Fine amount is immutable once set.")
         super().save(*args, **kwargs)

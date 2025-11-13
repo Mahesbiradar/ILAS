@@ -18,7 +18,7 @@ import openpyxl
 from datetime import datetime, timezone as dt_timezone
 from typing import Optional
 
-from django.http import HttpResponse, JsonResponse
+from django.http import HttpResponse
 from django.db import transaction
 from django.utils import timezone
 from django.shortcuts import get_object_or_404
@@ -45,6 +45,7 @@ from .serializers import (
     BulkBookImportSerializer,
     PublicBookSerializer,
 )
+from .pagination import StandardResultsSetPagination, AdminResultsSetPagination
 
 User = get_user_model()
 
@@ -91,6 +92,7 @@ class BookViewSet(viewsets.ModelViewSet):
     serializer_class = BookSerializer
     parser_classes = [MultiPartParser, FormParser]
     permission_classes = [IsAdminOrReadOnly]
+    pagination_class = StandardResultsSetPagination
 
     def get_permissions(self):
         if self.action in ("bulk_upload",):
@@ -190,7 +192,11 @@ class BookViewSet(viewsets.ModelViewSet):
         qs = self.queryset
         if q:
             qs = qs.filter(Q(title__icontains=q) | Q(isbn__icontains=q) | Q(book_code__icontains=q))
-        serializer = self.get_serializer(qs[:25], many=True)
+        page = self.paginate_queryset(qs)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        serializer = self.get_serializer(qs, many=True)
         return Response(serializer.data)
     
     # ------------------------
@@ -203,7 +209,11 @@ class BookViewSet(viewsets.ModelViewSet):
         qs = Book.objects.filter(is_active=True)
         if search:
             qs = qs.filter(Q(title__icontains=search) | Q(author__icontains=search))
-        data = PublicBookSerializer(qs[:100], many=True).data
+        page = self.paginate_queryset(qs)
+        if page is not None:
+            serializer = PublicBookSerializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        data = PublicBookSerializer(qs, many=True).data
         return Response(data, status=200)
 
 
@@ -254,6 +264,19 @@ class ReturnBookAPIView(APIView):
         book = get_object_or_404(Book, pk=book_id)
         member = get_object_or_404(get_user_model(), pk=member_id)
 
+        active_txn = (
+            BookTransaction.objects.filter(book=book, txn_type=BookTransaction.TYPE_ISSUE, is_active=True)
+            .select_related("member")
+            .first()
+        )
+        if not active_txn:
+            return Response({"detail": "No active issue exists for this book."}, status=400)
+        if str(active_txn.member_id) != str(member.id):
+            return Response(
+                {"detail": "Book must be returned by the member who has the active issue."},
+                status=403,
+            )
+
         try:
             # Call the model method that handles validation + atomic locking
             txn = book.mark_returned(
@@ -296,8 +319,19 @@ class UpdateBookStatusAPIView(APIView):
                     return Response(
                         {"detail": "Use the Return endpoint for issued books."}, status=400
                     )
-                book.mark_status("MAINTENANCE" if book.status == Book.STATUS_MAINTENANCE else "AVAILABLE",
-                                 actor=request.user, remarks=remarks)
+                if book.status == Book.STATUS_REMOVED:
+                    return Response(
+                        {"detail": "Removed books cannot be reactivated."},
+                        status=400,
+                    )
+                book.status = Book.STATUS_AVAILABLE
+                book.last_modified_by = request.user
+                # Ensure issued_to cleared when marking available
+                update_fields = ["status", "last_modified_by", "updated_at"]
+                if book.issued_to is not None:
+                    book.issued_to = None
+                    update_fields.append("issued_to")
+                book.save(update_fields=update_fields)
             else:
                 txn = book.mark_status(status_type, actor=request.user, remarks=remarks)
             return Response(
@@ -357,56 +391,76 @@ class InventoryReportView(APIView):
         return csv_response("inventory_report.csv", ({"status": s, "count": c} for s, c in data), headers)
 
 
-# ----------------------------------------------------------
-# Admin AJAX Search
-# ----------------------------------------------------------
-def admin_search_books(request):
-    query = request.GET.get("q", "").strip()
-    if not query:
-        return JsonResponse([], safe=False)
+class AdminBookSearchView(APIView):
+    permission_classes = [IsAdminUser]
+    pagination_class = AdminResultsSetPagination
 
-    books = Book.objects.filter(
-        Q(title__icontains=query) | Q(isbn__icontains=query) | Q(book_code__icontains=query)
-    )[:10]
-    data = [
-        {
-            "id": b.id,
-            "book_code": b.book_code,
-            "title": b.title,
-            "author": b.author or "",
-            "isbn": b.isbn or "",
-            "status": b.status,
-            "shelf": b.shelf_location or "",
-        }
-        for b in books
-    ]
-    return JsonResponse(data, safe=False)
+    def get(self, request):
+        query = request.query_params.get("q", "").strip()
+        paginator = self.pagination_class()
+        if not query:
+            paginator.paginate_queryset(Book.objects.none(), request, view=self)
+            return paginator.get_paginated_response([])
 
-
-def admin_search_users(request):
-    query = request.GET.get("q", "").strip()
-    if not query:
-        return JsonResponse([], safe=False)
-    users = User.objects.filter(Q(username__icontains=query) | Q(email__icontains=query))[:10]
-    return JsonResponse(
-        [{"id": u.id, "username": u.username, "email": u.email} for u in users],
-        safe=False,
-    )
+        qs = Book.objects.filter(
+            Q(title__icontains=query) | Q(isbn__icontains=query) | Q(book_code__icontains=query)
+        ).order_by("title")
+        page = paginator.paginate_queryset(qs, request, view=self)
+        data = [
+            {
+                "id": b.id,
+                "book_code": b.book_code,
+                "title": b.title,
+                "author": b.author or "",
+                "isbn": b.isbn or "",
+                "status": b.status,
+                "shelf": b.shelf_location or "",
+            }
+            for b in page
+        ]
+        return paginator.get_paginated_response(data)
 
 
-def admin_active_transactions(request):
-    txns = BookTransaction.objects.filter(is_active=True, txn_type="ISSUE").select_related("book", "member")[:20]
-    data = [
-        {
-            "id": t.id,
-            "book_code": t.book.book_code,
-            "title": t.book.title,
-            "member": t.member.username if t.member else "",
-            "due_date": t.due_date.strftime("%Y-%m-%d") if t.due_date else None,
-        }
-        for t in txns
-    ]
-    return JsonResponse(data, safe=False)
+class AdminUserSearchView(APIView):
+    permission_classes = [IsAdminUser]
+    pagination_class = AdminResultsSetPagination
+
+    def get(self, request):
+        query = request.query_params.get("q", "").strip()
+        paginator = self.pagination_class()
+        if not query:
+            paginator.paginate_queryset(User.objects.none(), request, view=self)
+            return paginator.get_paginated_response([])
+
+        qs = User.objects.filter(Q(username__icontains=query) | Q(email__icontains=query)).order_by("username")
+        page = paginator.paginate_queryset(qs, request, view=self)
+        data = [{"id": u.id, "username": u.username, "email": u.email} for u in page]
+        return paginator.get_paginated_response(data)
+
+
+class AdminActiveTransactionsView(APIView):
+    permission_classes = [IsAdminUser]
+    pagination_class = AdminResultsSetPagination
+
+    def get(self, request):
+        qs = (
+            BookTransaction.objects.filter(is_active=True, txn_type=BookTransaction.TYPE_ISSUE)
+            .select_related("book", "member")
+            .order_by("-due_date")
+        )
+        paginator = self.pagination_class()
+        page = paginator.paginate_queryset(qs, request, view=self)
+        data = [
+            {
+                "id": t.id,
+                "book_code": t.book.book_code,
+                "title": t.book.title,
+                "member": t.member.username if t.member else "",
+                "due_date": t.due_date.strftime("%Y-%m-%d") if t.due_date else None,
+            }
+            for t in page
+        ]
+        return paginator.get_paginated_response(data)
 
 
 # ----------------------------------------------------------
@@ -447,14 +501,17 @@ class BookLookupView(APIView):
 class ActiveTransactionsView(APIView):
     """List all currently active issue transactions."""
     permission_classes = [IsAuthenticated]
+    pagination_class = AdminResultsSetPagination
 
     def get(self, request):
         member_id = request.query_params.get("member_id")
         qs = BookTransaction.objects.filter(txn_type=BookTransaction.TYPE_ISSUE, is_active=True).select_related("book", "member")
         if member_id:
             qs = qs.filter(member__id=member_id)
+        paginator = self.pagination_class()
+        page = paginator.paginate_queryset(qs, request, view=self)
         data = []
-        for t in qs:
+        for t in page:
             due_days = (timezone.now().date() - t.due_date.date()).days if t.due_date else 0
             overdue = max(0, due_days)
             data.append({
@@ -468,7 +525,7 @@ class ActiveTransactionsView(APIView):
                 "days_overdue": overdue,
                 "fine_estimate": str(t.fine_amount),
             })
-        return Response(data, status=200)
+        return paginator.get_paginated_response(data)
 
 
 # ----------------------------------------------------------------------
@@ -476,11 +533,14 @@ class ActiveTransactionsView(APIView):
 # ----------------------------------------------------------------------
 class PublicBookListView(APIView):
     permission_classes = [AllowAny]
+    pagination_class = StandardResultsSetPagination
 
     def get(self, request):
         search = request.query_params.get("q")
         qs = Book.objects.filter(is_active=True)
         if search:
             qs = qs.filter(Q(title__icontains=search) | Q(author__icontains=search))
-        data = PublicBookSerializer(qs[:100], many=True).data
-        return Response(data, status=200)
+        paginator = self.pagination_class()
+        page = paginator.paginate_queryset(qs, request, view=self)
+        serializer = PublicBookSerializer(page, many=True)
+        return paginator.get_paginated_response(serializer.data)

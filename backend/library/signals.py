@@ -143,11 +143,13 @@ def log_book_activity(sender, instance, created, **kwargs):
             action = AuditLog.ACTION_BOOK_ADD if created else AuditLog.ACTION_BOOK_EDIT
             remarks = "Book created" if created else "Book updated"
 
+            previous = getattr(instance, "_previous_state", None) if not created else None
             create_audit(
                 actor=actor,
                 action=action,
                 target_type="Book",
                 target_id=instance.book_code or str(instance.pk),
+                old_values=previous,
                 new_values={
                     "title": instance.title,
                     "isbn": instance.isbn,
@@ -156,6 +158,8 @@ def log_book_activity(sender, instance, created, **kwargs):
                 remarks=remarks,
                 source="admin-ui",
             )
+            if hasattr(instance, "_previous_state"):
+                delattr(instance, "_previous_state")
     except Exception as e:
         logger.exception("Book audit creation failed for %s: %s", instance.book_code, e)
 

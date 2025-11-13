@@ -11,10 +11,12 @@ Implements:
 import os
 import zipfile
 import openpyxl
+from django import forms
 from django.contrib import admin, messages
 from django.urls import path
 from django.shortcuts import render, redirect
 from django.core.files.base import ContentFile
+from django.core.exceptions import ValidationError
 from django.db import transaction
 
 from .models import Book, BookTransaction, AuditLog
@@ -39,8 +41,21 @@ class BookTransactionInline(admin.TabularInline):
 # ----------------------------------------------------------------------
 # BOOK ADMIN
 # ----------------------------------------------------------------------
+class BookAdminForm(forms.ModelForm):
+    class Meta:
+        model = Book
+        fields = "__all__"
+
+    def clean_status(self):
+        status = self.cleaned_data.get("status")
+        if status == Book.STATUS_ISSUED:
+            raise ValidationError("Status ISSUED can only be set via the issue transaction workflow.")
+        return status
+
+
 @admin.register(Book)
 class BookAdmin(admin.ModelAdmin):
+    form = BookAdminForm
     list_display = ("book_code", "title", "author", "status", "issued_to", "shelf_location", "created_at")
     list_filter = ("status", "category", "language")
     search_fields = ("book_code", "title", "author", "isbn")
@@ -293,7 +308,11 @@ class BookAdmin(admin.ModelAdmin):
     # SAVE + DELETE (AUDIT-SAFE)
     # ------------------------------------------------------------------
     def save_model(self, request, obj, form, change):
-        """Save book safely without duplicate audits."""
+        """Prevent editing of issued books and ensure actor attribution."""
+        if change:
+            original = Book.objects.filter(pk=obj.pk).only("status").first()
+            if original and original.status == Book.STATUS_ISSUED:
+                raise ValidationError("Issued books cannot be edited. Process a return first.")
         obj.last_modified_by = request.user
         obj._suppress_audit = False  # allow signal audit (handled once)
         super().save_model(request, obj, form, change)
@@ -315,12 +334,19 @@ class BookTransactionAdmin(admin.ModelAdmin):
     readonly_fields = ("actor", "issue_date", "due_date", "return_date", "fine_amount")
     ordering = ("-created_at",)
 
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        if request.method not in ("GET", "HEAD", "OPTIONS"):
+            return False
+        return super().has_change_permission(request, obj)
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
     def save_model(self, request, obj, form, change):
-        """Audit-safe transaction save."""
-        obj.actor = request.user
-        obj._suppress_audit = False
-        super().save_model(request, obj, form, change)
-        # No manual create_audit here — handled by signal
+        raise ValidationError("Book transactions are immutable once recorded.")
 
 
 # ----------------------------------------------------------------------

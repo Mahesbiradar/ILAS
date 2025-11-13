@@ -1,0 +1,291 @@
+// src/pages/admin/BooksManager.jsx
+import React, { useEffect, useState } from "react";
+import toast from "react-hot-toast";
+import { BookOpen, Plus, Upload, Edit2, Trash2, Search, ChevronLeft, ChevronRight } from "lucide-react";
+import { Button, Card, PageTitle, SectionHeader, EmptyState, Input, Loader } from "../../components/common";
+import AddBook from "../../components/admin/books/AddBook";
+import EditBook from "../../components/admin/books/EditBook";
+import BulkUploadManager from "../../components/admin/books/BulkUploadManager";
+import { getBooks, deleteBook, bulkDeleteBooks } from "../../api/libraryApi";
+
+/**
+ * BooksManager Page - Modernized
+ * Consolidated admin page for managing all books with modern UI
+ */
+export default function BooksManager() {
+  const [books, setBooks] = useState([]);
+  const [pagination, setPagination] = useState({ count: 0, next: null, previous: null });
+  const [page, setPage] = useState(1);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [category, setCategory] = useState("All");
+  const [categories, setCategories] = useState(["All"]);
+  const [activeTab, setActiveTab] = useState("view");
+  const [selectedBook, setSelectedBook] = useState(null);
+  const [showEdit, setShowEdit] = useState(false);
+  const [showAdd, setShowAdd] = useState(false);
+
+  const loadBooks = async (p = 1) => {
+    try {
+      setLoading(true);
+      const params = { page: p, search: search.trim() };
+      if (category !== "All") params.category = category;
+      const data = await getBooks(params);
+
+      setBooks(data.results || []);
+      setPagination({
+        count: data.count || 0,
+        next: data.next,
+        previous: data.previous,
+      });
+      setPage(p);
+
+      const cats = new Set(["All"]);
+      (data.results || []).forEach((b) => b.category && cats.add(b.category));
+      setCategories(Array.from(cats));
+    } catch (err) {
+      console.error("loadBooks error:", err);
+      toast.error("Failed to load books.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadBooks(1);
+  }, []);
+
+  useEffect(() => {
+    const timer = setTimeout(() => loadBooks(1), 400);
+    return () => clearTimeout(timer);
+  }, [search, category]);
+
+  const handleDelete = async (bookCode) => {
+    if (!window.confirm("Delete this book and all its copies?")) return;
+    try {
+      await deleteBook(bookCode);
+      toast.success("Book deleted successfully!");
+      loadBooks(page);
+    } catch (err) {
+      toast.error("Failed to delete book.");
+    }
+  };
+
+  const tabs = [
+    { id: "view", label: "All Books", icon: BookOpen },
+    { id: "add", label: "Add Book", icon: Plus },
+    { id: "bulk", label: "Bulk Upload", icon: Upload },
+  ];
+
+  const totalPages = Math.ceil(pagination.count / 20);
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 px-4 py-8">
+      <div className="max-w-7xl mx-auto">
+        <PageTitle 
+          title="Books Manager" 
+          subtitle="Manage your library's book collection"
+          icon={BookOpen}
+        />
+
+        {/* Tab Navigation */}
+        <div className="flex flex-wrap gap-1 mb-6 bg-white dark:bg-gray-800 rounded-lg shadow-sm p-1 overflow-x-auto">
+          {tabs.map((tab) => {
+            const TabIcon = tab.icon;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-md font-medium transition-all duration-200 whitespace-nowrap ${
+                  activeTab === tab.id
+                    ? "bg-blue-600 text-white shadow-md"
+                    : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                }`}
+              >
+                <TabIcon className="w-4 h-4" />
+                {tab.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Tab Content */}
+        {activeTab === "view" && (
+          <div className="space-y-6">
+            {/* Search & Filter Section */}
+            <Card variant="elevated" className="p-4">
+              <div className="flex flex-col sm:flex-row gap-4">
+                <div className="flex-1 relative">
+                  <Search className="absolute left-3 top-3 w-5 h-5 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Search by title, author, or ISBN..."
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white transition-all"
+                  />
+                </div>
+                <select
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value)}
+                  className="px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white transition-all"
+                >
+                  {categories.map((cat) => (
+                    <option key={cat}>{cat}</option>
+                  ))}
+                </select>
+              </div>
+            </Card>
+
+            {/* Books List */}
+            {loading ? (
+              <Loader />
+            ) : books.length === 0 ? (
+              <EmptyState
+                icon={BookOpen}
+                title="No books found"
+                description="Start by adding books to your library collection"
+                action={
+                  <Button 
+                    variant="primary" 
+                    onClick={() => setActiveTab("add")}
+                    className="gap-2"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Add First Book
+                  </Button>
+                }
+              />
+            ) : (
+              <>
+                <Card variant="elevated" className="overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-gray-700 dark:to-gray-600 border-b border-gray-200 dark:border-gray-600">
+                          <th className="p-4 text-left font-semibold text-gray-900 dark:text-white">Title</th>
+                          <th className="p-4 text-left font-semibold text-gray-900 dark:text-white">Author</th>
+                          <th className="p-4 text-left font-semibold text-gray-900 dark:text-white">Category</th>
+                          <th className="p-4 text-center font-semibold text-gray-900 dark:text-white">Quantity</th>
+                          <th className="p-4 text-center font-semibold text-gray-900 dark:text-white">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                        {books.map((book) => (
+                          <tr key={book.book_id} className="hover:bg-blue-50 dark:hover:bg-gray-700 transition-colors">
+                            <td className="p-4 font-medium text-gray-900 dark:text-white">{book.title}</td>
+                            <td className="p-4 text-gray-700 dark:text-gray-300">{book.author}</td>
+                            <td className="p-4">
+                              <span className="px-2.5 py-1 bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 rounded-full text-xs font-medium">
+                                {book.category}
+                              </span>
+                            </td>
+                            <td className="p-4 text-center text-gray-700 dark:text-gray-300">{book.quantity}</td>
+                            <td className="p-4 text-center">
+                              <div className="flex justify-center gap-2">
+                                <button
+                                  onClick={() => {
+                                    setSelectedBook(book);
+                                    setShowEdit(true);
+                                  }}
+                                  className="p-2 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900 rounded-lg transition-colors"
+                                  title="Edit book"
+                                >
+                                  <Edit2 className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={() => handleDelete(book.book_code)}
+                                  className="p-2 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900 rounded-lg transition-colors"
+                                  title="Delete book"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </Card>
+
+                {/* Pagination */}
+                <div className="flex justify-center items-center gap-4">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={!pagination.previous}
+                    onClick={() => loadBooks(page - 1)}
+                    className="gap-2"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                    Previous
+                  </Button>
+                  <span className="text-gray-700 dark:text-gray-300 font-medium">
+                    Page {page} of {totalPages || 1}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={!pagination.next}
+                    onClick={() => loadBooks(page + 1)}
+                    className="gap-2"
+                  >
+                    Next
+                    <ChevronRight className="w-4 h-4" />
+                  </Button>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        {activeTab === "add" && (
+          <Card variant="elevated" className="p-6">
+            {showAdd ? (
+              <AddBook
+                onClose={() => setShowAdd(false)}
+                onAdded={() => {
+                  loadBooks(1);
+                  setShowAdd(false);
+                }}
+              />
+            ) : (
+              <div className="text-center py-8">
+                <BookOpen className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                <p className="text-gray-700 dark:text-gray-300 mb-6">Add a new book to your library</p>
+                <Button
+                  variant="primary"
+                  size="lg"
+                  onClick={() => setShowAdd(true)}
+                  className="gap-2"
+                >
+                  <Plus className="w-5 h-5" />
+                  Add New Book
+                </Button>
+              </div>
+            )}
+          </Card>
+        )}
+
+        {activeTab === "bulk" && (
+          <Card variant="elevated" className="p-6">
+            <BulkUploadManager onUploaded={() => loadBooks(1)} />
+          </Card>
+        )}
+
+        {/* Edit Modal */}
+        {showEdit && selectedBook && (
+          <EditBook
+            book={selectedBook}
+            onClose={() => setShowEdit(false)}
+            onSubmit={() => {
+              setShowEdit(false);
+              loadBooks(page);
+            }}
+          />
+        )}
+      </div>
+    </div>
+  );
+}

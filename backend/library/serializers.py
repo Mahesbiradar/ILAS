@@ -155,8 +155,8 @@ class AuditLogSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ["id", "timestamp", "actor_name"]
 
-        def get_actor_name(self, obj):
-            return getattr(obj.actor, "username", "System")
+    def get_actor_name(self, obj):
+        return getattr(obj.actor, "username", "System")
 
 
 class BulkBookImportSerializer(serializers.Serializer):

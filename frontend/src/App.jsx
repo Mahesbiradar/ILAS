@@ -5,20 +5,25 @@ import { Toaster } from "react-hot-toast";
 // 🧱 Layout
 import MainLayout from "./components/layout/MainLayout";
 
-// 📄 Pages
+// 📄 Pages - Public & Common
 import Home from "./pages/Home";
-import Dashboard from "./pages/Dashboard";
-import Books from "./pages/Books";
-import Members from "./pages/Members";
 import Login from "./pages/Login";
-// import LibraryOps from "./pages/LibraryOps";
-import AllBooksManager from "./pages/AllBooksManager"; // ✅ New Page
-// import LibraryReports from "./pages/LibraryReports";   // ✅ New Page
-import UserTransactions from "./pages/UserTransactions";
-import AdminTransactions from "./pages/AdminTransactions";
 import About from "./pages/About";
 import Unauthorized from "./pages/Unauthorized";
 import Profile from "./pages/Profile";
+
+// 📄 Pages - User Pages
+import Books from "./pages/Books";
+import UserDashboard from "./pages/user/Dashboard";
+import UserTransactions from "./pages/user/Transactions";
+
+// 📄 Pages - Admin Pages
+import AdminDashboard from "./pages/admin/Dashboard";
+import BooksManager from "./pages/admin/BooksManager";
+import LibraryOperations from "./pages/admin/LibraryOperations";
+import MembersManager from "./pages/admin/MembersManager";
+import AdminTransactions from "./pages/admin/Transactions";
+import Reports from "./pages/admin/Reports";
 
 // 🔐 Auth & Role Guards
 import { AuthProvider } from "./context/AuthProvider";
@@ -70,14 +75,6 @@ function App() {
               }
             />
             <Route
-              path="dashboard"
-              element={
-                <RoleGuard allowedRoles={["user", "admin", "librarian","student","teacher"]}>
-                  <Dashboard />
-                </RoleGuard>
-              }
-            />
-            <Route
               path="about"
               element={
                 <RoleGuard allowedRoles={["user", "admin", "librarian","student","teacher"]}>
@@ -88,25 +85,27 @@ function App() {
 
             {/* 👥 Members (Admin + Librarian) */}
             <Route
-              path="members"
+              path="admin/members"
               element={
                 <RoleGuard allowedRoles={["admin", "librarian"]}>
-                  <Members />
+                  <MembersManager />
                 </RoleGuard>
               }
             />
 
-            {/* 💳 Transactions */}
+            {/* 💳 Transactions - User */}
             <Route
-              path="transactions/user"
+              path="user/transactions"
               element={
                 <RoleGuard allowedRoles={["user", "student", "teacher"]}>
                   <UserTransactions />
                 </RoleGuard>
               }
             />
+
+            {/* 💳 Transactions - Admin */}
             <Route
-              path="transactions/admin"
+              path="admin/transactions"
               element={
                 <RoleGuard allowedRoles={["admin", "librarian"]}>
                   <AdminTransactions />
@@ -116,38 +115,51 @@ function App() {
 
             {/* 🛠️ Library Management Tools (Admin Only) */}
             <Route
-              path="library-ops"
+              path="admin/library-ops"
               element={
-                <RoleGuard allowedRoles={["admin"]}>
-                  {/* <LibraryOps /> */}
+                <RoleGuard allowedRoles={["admin", "librarian"]}>
+                  <LibraryOperations />
                 </RoleGuard>
               }
             />
 
-            {/* 📘 All Books Manager (Admin Only) */}
+            {/* 📘 Books Manager (Admin Only) */}
             <Route
-              path="books-manager"
+              path="admin/books"
               element={
-                <RoleGuard allowedRoles={["admin"]}>
-                  <AllBooksManager />
+                <RoleGuard allowedRoles={["admin", "librarian"]}>
+                  <BooksManager />
                 </RoleGuard>
               }
             />
+
+            {/* 📊 Reports (Admin Only) */}
             <Route
-              path="/profile"
+              path="admin/reports"
               element={
-                <ProtectedRoute roles={["admin", "student", "teacher"]}>
+                <RoleGuard allowedRoles={["admin", "librarian"]}>
+                  <Reports />
+                </RoleGuard>
+              }
+            />
+
+            {/* Dashboard - User */}
+            <Route
+              path="user/dashboard"
+              element={
+                <RoleGuard allowedRoles={["user", "student", "teacher"]}>
+                  <UserDashboard />
+                </RoleGuard>
+              }
+            />
+
+            {/* 👤 Profile */}
+            <Route
+              path="profile"
+              element={
+                <ProtectedRoute>
                   <Profile />
                 </ProtectedRoute>
-              }
-            />
-            {/* 📊 Reports Dashboard (Admin Only) */}
-            <Route
-              path="library-reports"
-              element={
-                <RoleGuard allowedRoles={["admin"]}>
-                  {/* <LibraryReports /> */}
-                </RoleGuard>
               }
             />
           </Route>

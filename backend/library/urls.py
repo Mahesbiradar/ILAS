@@ -41,9 +41,9 @@ from .views import (
     MasterReportView,
     TransactionReportView,
     InventoryReportView,
-    admin_search_books,
-    admin_search_users,
-    admin_active_transactions,
+    AdminBookSearchView,
+    AdminUserSearchView,
+    AdminActiveTransactionsView,
     BookLookupView,
     ActiveTransactionsView,
     PublicBookListView,
@@ -96,9 +96,9 @@ admin_patterns = [
     path("dashboard/stats/", DashboardStats.as_view(), name="dashboard-stats"),
 
     # Admin AJAX
-    path("ajax/book-search/", admin_search_books, name="admin-book-search"),
-    path("ajax/user-search/", admin_search_users, name="admin-user-search"),
-    path("ajax/active-transactions/", admin_active_transactions, name="admin-active-transactions"),
+    path("ajax/book-search/", AdminBookSearchView.as_view(), name="admin-book-search"),
+    path("ajax/user-search/", AdminUserSearchView.as_view(), name="admin-user-search"),
+    path("ajax/active-transactions/", AdminActiveTransactionsView.as_view(), name="admin-active-transactions"),
 
     # Active transactions list (used by admin panel)
     path("transactions/active/", ActiveTransactionsView.as_view(), name="active-transactions"),
