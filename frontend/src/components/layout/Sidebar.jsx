@@ -21,34 +21,37 @@ export default function Sidebar({ collapsed, onClose, user }) {
   const { logout } = useAuth();
   const navigate = useNavigate();
 
-  // ✅ Updated Nav Items
+  // ✅ Updated Nav Items — use the exact labels/paths requested
   const nav = [
-    { to: "/home", label: "Home", icon: <Home size={18} /> },
-    { to: "/dashboard", label: "Dashboard", icon: <LayoutDashboard size={18} /> },
-    { to: "/books", label: "Books", icon: <BookOpen size={18} /> },
+    // Public / User
+    { to: "/", label: "Home", icon: <Home size={16} /> },
+    { to: "/books", label: "Books", icon: <BookOpen size={16} /> },
+    { to: "/user/dashboard", label: "User Dashboard", icon: <LayoutDashboard size={16} /> },
+    { to: "/user/transactions", label: "User Transactions", icon: <BookOpen size={16} /> },
+    { to: "/about", label: "About", icon: <Info size={16} /> },
 
-    // 🛠️ Admin-only items
-    { to: "/library-ops", label: "Library Ops", icon: <LibraryBig size={18} />, admin: true },
-    { to: "/books-manager", label: "All Books Manager", icon: <BookCopy size={18} />, admin: true },
-    { to: "/library-reports", label: "Library Reports", icon: <FileText size={18} />, admin: true },
-    { to: "/members", label: "Members", icon: <Users size={18} />, admin: true },
-
-    // ℹ️ General
-    { to: "/about", label: "About", icon: <Info size={18} /> },
+    // Admin-only
+    { to: "/admin/dashboard", label: "Admin Dashboard", icon: <LayoutDashboard size={16} />, admin: true },
+    { to: "/admin/books", label: "BooksManager", icon: <BookOpen size={16} />, admin: true },
+    { to: "/admin/library-ops", label: "LibraryOperations", icon: <LibraryBig size={16} />, admin: true },
+    { to: "/admin/reports", label: "Reports", icon: <FileText size={16} />, admin: true },
+    { to: "/admin/members", label: "MembersManager", icon: <Users size={16} />, admin: true },
+    { to: "/admin/transactions", label: "AdminTransactionList", icon: <BookCopy size={16} />, admin: true },
+    { to: "/admin/userview", label: "AdminUserView", icon: <User size={16} />, admin: true },
   ];
 
   return (
     <motion.aside
-      initial={{ x: -280 }}
-      animate={{ x: collapsed ? 0 : -280 }}
+      initial={{ x: -208 }}
+      animate={{ x: collapsed ? 0 : -208 }}
       transition={{ type: "tween" }}
-      className="fixed md:static top-0 left-0 h-full w-64 bg-white shadow-[2px_0_6px_rgba(0,0,0,0.05)] flex flex-col z-30"
+      className="fixed md:static top-0 left-0 h-full w-52 bg-white shadow-[2px_0_6px_rgba(0,0,0,0.05)] flex flex-col z-30"
     >
       {/* Header */}
       <div className="flex items-center justify-between h-[56px] px-5 bg-gradient-to-r from-blue-50 to-white shadow-[0_2px_6px_rgba(0,0,0,0.05)]">
         <Link to="/home" className="flex items-center gap-2">
-          <BookOpen size={22} className="text-blue-600" />
-          <span className="text-lg font-semibold text-blue-700 tracking-wide">ILAS</span>
+          <BookOpen size={20} className="text-blue-600" />
+          <span className="text-base font-semibold text-blue-700 tracking-wide">ILAS</span>
         </Link>
         <button
           className="md:hidden p-1 rounded hover:bg-gray-100"
@@ -68,7 +71,7 @@ export default function Sidebar({ collapsed, onClose, user }) {
             <Link
               key={item.to}
               to={item.to}
-              className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-all
+              className={`flex items-center gap-2 px-2 py-2 rounded-md text-xs transition-all
                 ${
                   active
                     ? "bg-blue-100 text-blue-700 font-semibold shadow-sm"
@@ -88,31 +91,31 @@ export default function Sidebar({ collapsed, onClose, user }) {
 
       {/* User Info Section */}
       <div className="p-4 mt-auto border-t border-gray-100">
-        <div className="flex items-center gap-3 mb-3">
-          <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-semibold text-sm">
+        <div className="flex items-center gap-2 mb-2">
+          <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-semibold text-xs">
             {user?.username?.charAt(0)?.toUpperCase() || "U"}
           </div>
           <div>
-            <div className="text-sm font-medium">{user?.username || "Guest"}</div>
+            <div className="text-xs font-medium">{user?.username || "Guest"}</div>
             <div className="text-xs text-gray-500 capitalize">{user?.role || "visitor"}</div>
           </div>
         </div>
 
-        <div className="flex flex-col gap-1 mt-2">
+        <div className="flex flex-col gap-0.5 mt-2">
           <button
             onClick={() => navigate("/profile")}
-            className="flex items-center gap-2 text-sm px-2 py-1.5 rounded-md text-gray-700 hover:bg-gray-100 transition"
+            className="flex items-center gap-1.5 text-xs px-2 py-1 rounded-md text-gray-700 hover:bg-gray-100 transition"
           >
-            <User size={15} /> Profile
+            <User size={14} /> Profile
           </button>
           <button
             onClick={() => {
               logout();
               navigate("/login");
             }}
-            className="flex items-center gap-2 text-sm px-2 py-1.5 rounded-md text-red-600 hover:bg-red-50 transition"
+            className="flex items-center gap-1.5 text-xs px-2 py-1 rounded-md text-red-600 hover:bg-red-50 transition"
           >
-            <LogOut size={15} /> Logout
+            <LogOut size={14} /> Logout
           </button>
         </div>
       </div>

@@ -98,8 +98,8 @@ export default function EditBook({ book, onSubmit, onClose }) {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-5">
-          {/* Book Info */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Book Info - compact 2-column layout */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <input name="title" placeholder="Title *" value={form.title || ""} onChange={handleChange} className="border rounded-lg px-3 py-2" />
             <input name="subtitle" placeholder="Subtitle" value={form.subtitle || ""} onChange={handleChange} className="border rounded-lg px-3 py-2" />
             <input name="author" placeholder="Author *" value={form.author || ""} onChange={handleChange} className="border rounded-lg px-3 py-2" />
@@ -117,8 +117,8 @@ export default function EditBook({ book, onSubmit, onClose }) {
             <input name="keywords" placeholder="Keywords" value={form.keywords || ""} onChange={handleChange} className="border rounded-lg px-3 py-2" />
           </div>
 
-          {/* Inventory Info */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Inventory Info - compact 2-column layout */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <input name="shelf_location" placeholder="Shelf Location" value={form.shelf_location || ""} onChange={handleChange} className="border rounded-lg px-3 py-2" />
             <input name="condition" placeholder="Condition" value={form.condition || ""} onChange={handleChange} className="border rounded-lg px-3 py-2" />
             <input name="availability_status" placeholder="Availability" value={form.availability_status || ""} onChange={handleChange} className="border rounded-lg px-3 py-2" />

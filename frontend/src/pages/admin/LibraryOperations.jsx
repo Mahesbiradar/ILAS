@@ -3,6 +3,7 @@ import React, { useState, useCallback } from "react";
 import toast from "react-hot-toast";
 import { Zap, RotateCcw, Settings, Loader } from "lucide-react";
 import { Button, Card, PageTitle, SectionHeader } from "../../components/common";
+import Skeleton from "../../components/ui/Skeleton";
 import BarcodeScanner from "../../components/admin/libraryOps/BarcodeScanner";
 import ManualScanInput from "../../components/admin/libraryOps/ManualScanInput";
 import ScanResultCard from "../../components/admin/libraryOps/ScanResultCard";
@@ -121,8 +122,8 @@ export default function LibraryOperations() {
   ];
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-8">
-      <h1 className="text-3xl font-bold text-blue-700 mb-8 text-center">
+    <div className="max-w-6xl mx-auto px-6 py-4">
+      <h1 className="text-3xl font-bold mb-6">
         📚 Library Operations
       </h1>
 
@@ -201,7 +202,12 @@ export default function LibraryOperations() {
               {activeTab === "status" && "🔄 Update Book Status"}
             </h2>
 
-            {loading && <p className="text-blue-600 mb-4">Processing...</p>}
+            {loading && (
+              <div className="mb-4">
+                <Skeleton className="w-48 h-4 mb-2" />
+                <Skeleton className="w-full h-6" />
+              </div>
+            )}
 
             <div className="space-y-4">
               <div>

@@ -46,8 +46,8 @@ export default function AdminDashboard() {
   if (loading) return <Loader />;
 
   return (
-    <div className="max-w-6xl mx-auto px-6">
-      <h1 className="text-3xl font-bold text-blue-700 mb-8 text-center">
+    <div className="max-w-6xl mx-auto px-6 py-4">
+      <h1 className="text-3xl font-bold mb-6 text-blue-700">
         🏛️ Library Admin Dashboard
       </h1>
 

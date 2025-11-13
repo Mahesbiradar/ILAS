@@ -3,6 +3,8 @@ import React, { useEffect, useState, useRef, useCallback } from "react";
 import toast from "react-hot-toast";
 import { BookOpen, Plus, Upload, Edit2, Trash2, Search, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button, Card, PageTitle, SectionHeader, EmptyState, Input, Loader } from "../../components/common";
+import BarcodeGenerator from "../../components/admin/books/BarcodeGenerator";
+import BookCard from "../../components/library/BookCard";
 import AddBook from "../../components/admin/books/AddBook";
 import EditBook from "../../components/admin/books/EditBook";
 import BulkUploadManager from "../../components/admin/books/BulkUploadManager";
@@ -25,7 +27,7 @@ export default function BooksManager() {
   const [loading, setLoading] = useState(true);
   const debounceRef = useRef(null);
 
-  const pagination = usePagination(20);
+  const pagination = usePagination(50);
 
   const loadBooks = useCallback(async (opts = {}) => {
     const p = opts.page ?? pagination.page;
@@ -39,8 +41,29 @@ export default function BooksManager() {
       if (c !== "All") params.category = c;
 
       const data = await getBooks(params);
-      setBooks(data.results || []);
-      pagination.setPaginationData(data);
+      // Handle backend shapes: { success, data, count } or normalized { results, count }
+      let results = [];
+      let count = 0;
+      let next = null;
+      let previous = null;
+
+      if (data) {
+        if (data.success && data.data) {
+          results = data.data;
+          count = data.count || results.length;
+        } else if (data.results) {
+          results = data.results;
+          count = data.count || results.length;
+          next = data.next;
+          previous = data.previous;
+        } else if (Array.isArray(data)) {
+          results = data;
+          count = data.length;
+        }
+      }
+
+      setBooks(results || []);
+      pagination.setPaginationData({ count, next, previous, results });
       pagination.setPage(p);
 
       // Extract categories from results
@@ -85,6 +108,7 @@ export default function BooksManager() {
     { id: "view", label: "All Books", icon: BookOpen },
     { id: "add", label: "Add Book", icon: Plus },
     { id: "bulk", label: "Bulk Upload", icon: Upload },
+    { id: "barcode", label: "Barcode Generator", icon: BookOpen },
   ];
 
   return (
@@ -166,59 +190,37 @@ export default function BooksManager() {
               />
             ) : (
               <>
-                <Card variant="elevated" className="overflow-hidden">
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-gray-700 dark:to-gray-600 border-b border-gray-200 dark:border-gray-600">
-                          <th className="p-4 text-left font-semibold text-gray-900 dark:text-white">Title</th>
-                          <th className="p-4 text-left font-semibold text-gray-900 dark:text-white">Author</th>
-                          <th className="p-4 text-left font-semibold text-gray-900 dark:text-white">Category</th>
-                          <th className="p-4 text-center font-semibold text-gray-900 dark:text-white">Quantity</th>
-                          <th className="p-4 text-center font-semibold text-gray-900 dark:text-white">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                        {books.map((book) => (
-                          <tr key={book.book_id} className="hover:bg-blue-50 dark:hover:bg-gray-700 transition-colors">
-                            <td className="p-4 font-medium text-gray-900 dark:text-white">{book.title}</td>
-                            <td className="p-4 text-gray-700 dark:text-gray-300">{book.author}</td>
-                            <td className="p-4">
-                              <span className="px-2.5 py-1 bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 rounded-full text-xs font-medium">
-                                {book.category}
-                              </span>
-                            </td>
-                            <td className="p-4 text-center text-gray-700 dark:text-gray-300">{book.quantity}</td>
-                            <td className="p-4 text-center">
-                              <div className="flex justify-center gap-2">
-                                <button
-                                  onClick={() => {
-                                    setSelectedBook(book);
-                                    setShowEdit(true);
-                                  }}
-                                  className="p-2 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900 rounded-lg transition-colors"
-                                  title="Edit book"
-                                >
-                                  <Edit2 className="w-4 h-4" />
-                                </button>
-                                <button
-                                  onClick={() => handleDelete(book.book_code)}
-                                  className="p-2 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900 rounded-lg transition-colors"
-                                  title="Delete book"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </Card>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                  {books.map((book) => (
+                    <div key={book.book_id || book.book_code || book.id} className="p-0">
+                      <div className="relative">
+                        <div className="absolute right-2 top-2 flex gap-1">
+                          <button
+                            onClick={() => {
+                              setSelectedBook(book);
+                              setShowEdit(true);
+                            }}
+                            className="p-1 bg-white rounded-md shadow text-blue-600 hover:bg-blue-50"
+                            title="Edit book"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(book.book_code)}
+                            className="p-1 bg-white rounded-md shadow text-red-600 hover:bg-red-50"
+                            title="Delete book"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                        <BookCard book={book} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
 
                 {/* Pagination */}
-                <div className="flex justify-center items-center gap-4">
+                <div className="flex justify-center items-center gap-4 mt-4">
                   <Button
                     variant="outline"
                     size="sm"
@@ -279,6 +281,14 @@ export default function BooksManager() {
         {activeTab === "bulk" && (
           <Card variant="elevated" className="p-6">
             <BulkUploadManager onUploaded={() => loadBooks({ page: 1 })} />
+          </Card>
+        )}
+
+        {activeTab === "barcode" && (
+          <Card variant="elevated" className="p-6">
+            <React.Suspense fallback={<div>Loading...</div>}>
+              <BarcodeGenerator />
+            </React.Suspense>
           </Card>
         )}
 

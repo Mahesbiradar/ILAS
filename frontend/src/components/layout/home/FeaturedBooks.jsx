@@ -1,46 +1,39 @@
 // src/components/layout/home/FeaturedBooks.jsx
-import React from "react";
+import React, { useEffect, useState } from "react";
 import BookCard from "../../library/BookCard";
-
-/**
- * Example featured books: replace with API call when backend ready.
- */
-const mockBooks = [
-  {
-    book_id: 1,
-    title: "Learn WebDev",
-    author: "OpenAI",
-    isbn: "012-345-6789",
-    category: "Technology",
-    quantity: 4,
-    cover_url: "/assets/covers/webdev.jpg",
-  },
-  {
-    book_id: 2,
-    title: "Intro to AI",
-    author: "A. Researcher",
-    isbn: "111-222-333",
-    category: "Technology",
-    quantity: 2,
-    cover_url: "/assets/covers/ai.jpg",
-  },
-  {
-    book_id: 3,
-    title: "Space & Beyond",
-    author: "Cosmos Author",
-    isbn: "444-555-666",
-    category: "Science",
-    quantity: 1,
-    cover_url: "/assets/covers/space.jpg",
-  },
-];
+import { getPublicBooks } from "../../../api/libraryApi";
+import Loader from "../../common/Loader";
 
 export default function FeaturedBooks() {
+  const [books, setBooks] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      setLoading(true);
+      try {
+        const data = await getPublicBooks({ ordering: "-created_at", page: 1, page_size: 6 });
+        if (mounted) setBooks(data.results || []);
+      } catch (err) {
+        console.warn("Failed to load featured books:", err.message);
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    })();
+    return () => (mounted = false);
+  }, []);
+
+  if (loading) return <Loader />;
+
+  if (!books.length)
+    return <p className="text-center text-gray-500">No featured books available.</p>;
+
   return (
     <div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-        {mockBooks.map((b) => (
-          <BookCard key={b.book_id} book={b} />
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+        {books.map((b) => (
+          <BookCard key={b.book_id || b.id || b.book_code} book={b} />
         ))}
       </div>
     </div>

@@ -27,6 +27,27 @@ export const getBooks = async (filters = {}) => {
       };
 };
 
+// 🔹 Public books endpoint (catalog) with pagination/search/category
+export const getPublicBooks = async (filters = {}) => {
+  const params = new URLSearchParams(filters).toString();
+  const res = await axios.get(`${PUBLIC}/books/?${params}`);
+  const data = res.data;
+  return Array.isArray(data)
+    ? { results: data, count: data.length, next: null, previous: null }
+    : {
+        results: data.results || [],
+        count: data.count || 0,
+        next: data.next,
+        previous: data.previous,
+      };
+};
+
+// 🔹 Library metadata (categories, tags) used by catalog filters
+export const getLibraryMeta = async () => {
+  const res = await axios.get(`${LIBRARY}/meta/`);
+  return res.data || {};
+};
+
 // 🔹 Get single book details (with nested copies)
 export const getBookDetails = async (bookCode) => {
   const res = await axios.get(`${LIBRARY}/books/${bookCode}/`);

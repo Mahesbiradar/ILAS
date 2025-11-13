@@ -15,6 +15,7 @@ import MemberLogs from "../../components/admin/members/MemberLogs";
 import ExportReports from "../../components/admin/members/ExportReports";
 import { usePagination } from "../../hooks/usePagination";
 import { Loader } from "lucide-react";
+import Skeleton from "../../components/ui/Skeleton";
 import toast from "react-hot-toast";
 
 /**
@@ -165,10 +166,8 @@ export default function MembersManager() {
   ];
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-8">
-      <h1 className="text-3xl font-bold text-blue-700 mb-8 text-center">
-        👥 Members Manager
-      </h1>
+    <div className="max-w-7xl mx-auto px-6 py-4">
+      <h1 className="text-3xl font-bold mb-6">👥 Members Manager</h1>
 
       {/* Tab Navigation */}
       <div className="flex flex-wrap gap-2 mb-6 border-b border-gray-200">
@@ -215,23 +214,33 @@ export default function MembersManager() {
 
           {/* Loading State */}
           {loading && (
-            <div className="flex justify-center py-8">
-              <Loader className="animate-spin text-blue-600" size={32} />
+            <div className="space-y-3 py-4">
+              <div className="flex items-center gap-4">
+                <Skeleton className="w-24 h-6" />
+                <Skeleton className="w-32 h-6" />
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Skeleton className="w-full h-10" />
+                <Skeleton className="w-full h-10" />
+                <Skeleton className="w-full h-10" />
+                <Skeleton className="w-full h-10" />
+              </div>
             </div>
           )}
 
           {/* Member Table */}
           {!loading && (
             <>
-              <MemberTable
+              <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-100">
+                <MemberTable
                 members={members}
                 onEdit={handleEdit}
                 onDelete={handleDelete}
                 onPromote={handlePromote}
-              />
+                />
 
-              {/* Pagination Controls */}
-              <div className="flex justify-between items-center mt-6 p-4 bg-gray-50 rounded-lg">
+                {/* Pagination Controls */}
+                <div className="flex justify-between items-center mt-6 p-4 bg-gray-50 rounded-lg">
                 <div className="text-sm text-gray-600">
                   Showing {members.length} of {pagination.count} members
                 </div>
@@ -254,6 +263,7 @@ export default function MembersManager() {
                     Next →
                   </button>
                 </div>
+              </div>
               </div>
             </>
           )}

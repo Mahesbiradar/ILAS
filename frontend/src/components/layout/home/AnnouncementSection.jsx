@@ -1,33 +1,47 @@
 // src/components/home/AnnouncementSection.jsx
 import React, { useState, useEffect } from "react";
-
-/**
- * Simple rotating announcement banner.
- * Replace `mockAnnouncements` with real API later.
- */
-
-const mockAnnouncements = [
-  { id: 1, title: "Welcome to ILAS", body: "New arrivals added this week — check Featured books!", type: "info" },
-  { id: 2, title: "Library Closed", body: "Library will be closed on Oct 25 for maintenance.", type: "alert" },
-  { id: 3, title: "Borrow Limit", body: "You can borrow up to 3 books at a time.", type: "tip" },
-];
+import { getAnnouncements } from "../../../services/announcementApi";
+import Loader from "../../common/Loader";
 
 export default function AnnouncementSection() {
   const [index, setIndex] = useState(0);
-  const ann = mockAnnouncements;
+  const [announcements, setAnnouncements] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const t = setInterval(() => setIndex((i) => (i + 1) % ann.length), 5000);
+    let mounted = true;
+    (async () => {
+      setLoading(true);
+      try {
+        const data = await getAnnouncements();
+        if (mounted) setAnnouncements(Array.isArray(data) ? data.filter((a) => a.is_active !== false) : []);
+      } catch (err) {
+        console.warn("Failed to load announcements:", err.message);
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!announcements.length) return;
+    const t = setInterval(() => setIndex((i) => (i + 1) % announcements.length), 6000);
     return () => clearInterval(t);
-  }, [ann.length]);
+  }, [announcements.length]);
+
+  if (loading) return <Loader />;
+
+  const ann = announcements.length ? announcements : [{ id: 0, title: "Welcome", body: "No announcements available." }];
 
   return (
     <section className="bg-gradient-to-r from-blue-50 to-white rounded-lg p-4 sm:p-6 shadow-sm">
       <div className="flex items-start gap-4">
         <div className="flex-none">
-          <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-bold">
-            IL
-          </div>
+          <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-bold">IL</div>
         </div>
 
         <div className="flex-1">

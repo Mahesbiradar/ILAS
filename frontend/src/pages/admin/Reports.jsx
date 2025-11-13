@@ -3,6 +3,7 @@ import React, { useState } from "react";
 import BookReportDownload from "../../components/admin/reports/BookReportDownload";
 import BarcodeReportDownload from "../../components/admin/reports/BarcodeReportDownload";
 import ReportFilter from "../../components/admin/reports/ReportFilter";
+import Skeleton from "../../components/ui/Skeleton";
 
 /**
  * Reports Page
@@ -19,8 +20,8 @@ export default function Reports() {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-8">
-      <h1 className="text-3xl font-bold text-blue-700 mb-8 text-center">
+    <div className="max-w-7xl mx-auto px-6 py-4">
+      <h1 className="text-3xl font-bold mb-6">
         📊 Library Reports
       </h1>
 
@@ -38,7 +39,7 @@ export default function Reports() {
         <BarcodeReportDownload filters={filters} />
 
         {/* Transaction Report */}
-        <div className="bg-white shadow-lg p-6 rounded-lg">
+        <div className="bg-white shadow-sm p-6 rounded-lg border border-gray-100">
           <h2 className="text-xl font-semibold text-gray-800 mb-2">
             📋 Transaction Report
           </h2>
@@ -51,7 +52,7 @@ export default function Reports() {
         </div>
 
         {/* Inventory Report */}
-        <div className="bg-white shadow-lg p-6 rounded-lg">
+        <div className="bg-white shadow-sm p-6 rounded-lg border border-gray-100">
           <h2 className="text-xl font-semibold text-gray-800 mb-2">
             📦 Inventory Report
           </h2>
@@ -64,7 +65,7 @@ export default function Reports() {
         </div>
 
         {/* Overdue Report */}
-        <div className="bg-white shadow-lg p-6 rounded-lg">
+        <div className="bg-white shadow-sm p-6 rounded-lg border border-gray-100">
           <h2 className="text-xl font-semibold text-gray-800 mb-2">
             ⏰ Overdue Books
           </h2>
@@ -77,7 +78,7 @@ export default function Reports() {
         </div>
 
         {/* Member History Report */}
-        <div className="bg-white shadow-lg p-6 rounded-lg">
+        <div className="bg-white shadow-sm p-6 rounded-lg border border-gray-100">
           <h2 className="text-xl font-semibold text-gray-800 mb-2">
             👤 Member History
           </h2>

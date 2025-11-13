@@ -18,7 +18,7 @@ export default function AddBook({ onClose, onAdded }) {
     language: "",
     keywords: "",
     description: "",
-    quantity: 1,
+    // quantity removed; copies are managed separately
     shelf_location: "",
     condition: "Good",
     availability_status: "Available",
@@ -147,15 +147,13 @@ export default function AddBook({ onClose, onAdded }) {
             </select>
           </div>
 
-          {/* Inventory Info */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <input name="language" placeholder="Language" value={form.language} onChange={handleChange} className="border rounded-md px-2 py-1.5" />
-            <input name="keywords" placeholder="Keywords" value={form.keywords} onChange={handleChange} className="border rounded-md px-2 py-1.5" />
-            <input name="quantity" type="number" min="1" value={form.quantity} onChange={handleChange} className="border rounded-md px-2 py-1.5" />
-            <input name="shelf_location" placeholder="Shelf Location" value={form.shelf_location} onChange={handleChange} className="border rounded-md px-2 py-1.5" />
-            <input name="condition" placeholder="Condition" value={form.condition} onChange={handleChange} className="border rounded-md px-2 py-1.5" />
-            <input name="availability_status" placeholder="Availability" value={form.availability_status} onChange={handleChange} className="border rounded-md px-2 py-1.5" />
-          </div>
+            {/* Inventory Info - compact 2-column layout */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <input name="language" placeholder="Language" value={form.language} onChange={handleChange} className="border rounded-md px-2 py-1.5" />
+              <input name="keywords" placeholder="Keywords" value={form.keywords} onChange={handleChange} className="border rounded-md px-2 py-1.5" />
+              <input name="shelf_location" placeholder="Shelf Location" value={form.shelf_location} onChange={handleChange} className="border rounded-md px-2 py-1.5" />
+              <input name="condition" placeholder="Condition" value={form.condition} onChange={handleChange} className="border rounded-md px-2 py-1.5" />
+            </div>
 
           {/* Finance & Source */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">

@@ -24,6 +24,7 @@ import LibraryOperations from "./pages/admin/LibraryOperations";
 import MembersManager from "./pages/admin/MembersManager";
 import AdminTransactions from "./pages/admin/Transactions";
 import Reports from "./pages/admin/Reports";
+import AdminUserView from "./pages/admin/AdminUserView";
 
 // 🔐 Auth & Role Guards
 import { AuthProvider } from "./context/AuthProvider";
@@ -54,10 +55,11 @@ function App() {
               </ProtectedRoute>
             }
           >
-            {/* Redirect root to /home */}
-            <Route index element={<Navigate to="home" replace />} />
+            {/* Render Home at root */}
+            <Route index element={<Home />} />
 
             {/* Common Routes (All roles) */}
+            {/* Keep explicit home route for compatibility */}
             <Route
               path="home"
               element={
@@ -83,12 +85,66 @@ function App() {
               }
             />
 
-            {/* 👥 Members (Admin + Librarian) */}
+            {/* Admin routes */}
+            <Route
+              path="admin/dashboard"
+              element={
+                <RoleGuard allowedRoles={["admin", "librarian"]}>
+                  <AdminDashboard />
+                </RoleGuard>
+              }
+            />
+
+            <Route
+              path="admin/books"
+              element={
+                <RoleGuard allowedRoles={["admin", "librarian"]}>
+                  <BooksManager />
+                </RoleGuard>
+              }
+            />
+
+            <Route
+              path="admin/library-ops"
+              element={
+                <RoleGuard allowedRoles={["admin", "librarian"]}>
+                  <LibraryOperations />
+                </RoleGuard>
+              }
+            />
+
+            <Route
+              path="admin/reports"
+              element={
+                <RoleGuard allowedRoles={["admin", "librarian"]}>
+                  <Reports />
+                </RoleGuard>
+              }
+            />
+
             <Route
               path="admin/members"
               element={
                 <RoleGuard allowedRoles={["admin", "librarian"]}>
                   <MembersManager />
+                </RoleGuard>
+              }
+            />
+
+            <Route
+              path="admin/transactions"
+              element={
+                <RoleGuard allowedRoles={["admin", "librarian"]}>
+                  <AdminTransactions />
+                </RoleGuard>
+              }
+            />
+
+            <Route
+              path="admin/userview"
+              element={
+                <RoleGuard allowedRoles={["admin", "librarian"]}>
+                  <AdminUserView />
                 </RoleGuard>
               }
             />
@@ -109,36 +165,6 @@ function App() {
               element={
                 <RoleGuard allowedRoles={["admin", "librarian"]}>
                   <AdminTransactions />
-                </RoleGuard>
-              }
-            />
-
-            {/* 🛠️ Library Management Tools (Admin Only) */}
-            <Route
-              path="admin/library-ops"
-              element={
-                <RoleGuard allowedRoles={["admin", "librarian"]}>
-                  <LibraryOperations />
-                </RoleGuard>
-              }
-            />
-
-            {/* 📘 Books Manager (Admin Only) */}
-            <Route
-              path="admin/books"
-              element={
-                <RoleGuard allowedRoles={["admin", "librarian"]}>
-                  <BooksManager />
-                </RoleGuard>
-              }
-            />
-
-            {/* 📊 Reports (Admin Only) */}
-            <Route
-              path="admin/reports"
-              element={
-                <RoleGuard allowedRoles={["admin", "librarian"]}>
-                  <Reports />
                 </RoleGuard>
               }
             />

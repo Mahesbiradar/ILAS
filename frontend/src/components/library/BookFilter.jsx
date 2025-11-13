@@ -1,6 +1,6 @@
 import React from "react";
 
-export default function BookFilter({ search, setSearch, category, setCategory }) {
+export default function BookFilter({ search, setSearch, category, setCategory, categories = [] }) {
   return (
     <div className="flex flex-wrap gap-3 mb-6 justify-between items-center bg-white p-4 rounded-md shadow-sm">
       {/* 🔍 Search Bar */}
@@ -8,29 +8,24 @@ export default function BookFilter({ search, setSearch, category, setCategory })
         type="text"
         value={search}
         onChange={(e) => setSearch(e.target.value)}
-        placeholder="🔍 Search books..."
+        placeholder="Search books by title, author or ISBN"
         className="border p-2 rounded w-full sm:w-64 focus:ring-2 focus:ring-blue-400 outline-none"
+        aria-label="Search books"
       />
 
-      {/* 📚 Category Dropdown */}
+      {/* 📚 Category Dropdown (dynamic) */}
       <select
         value={category}
         onChange={(e) => setCategory(e.target.value)}
         className="border p-2 rounded focus:ring-2 focus:ring-blue-400 outline-none"
+        aria-label="Filter by category"
       >
         <option value="">All Categories</option>
-        <option value="Electronics">Electronics</option>
-        <option value="Telecommunication">Telecommunication</option>
-        <option value="Embedded Systems">Embedded Systems</option>
-        <option value="Programming">Programming</option>
-        <option value="C & C++">C & C++</option>
-        <option value="Python">Python</option>
-        <option value="Engineering Mathematics">Engineering Mathematics</option>
-        <option value="Signal Processing">Signal Processing</option>
-        <option value="Networking">Networking</option>
-        <option value="Microcontrollers">Microcontrollers</option>
-        <option value="IoT">IoT (Internet of Things)</option>
-        <option value="Project Management">Project Management</option>
+        {categories.map((c) => (
+          <option key={c.id || c.name} value={c.slug || c.name}>
+            {c.name}
+          </option>
+        ))}
       </select>
     </div>
   );
