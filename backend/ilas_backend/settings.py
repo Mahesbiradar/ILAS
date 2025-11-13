@@ -44,6 +44,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'corsheaders',
     'rest_framework_simplejwt',
+    'drf_spectacular',
 
 
     # Local apps
@@ -77,6 +78,7 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": (
        "rest_framework.permissions.IsAuthenticated",
     ),
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 10,  # you can tune this later
     "DEFAULT_FILTER_BACKENDS": [
@@ -199,6 +201,7 @@ LIBRARY_BORROW_DAYS_DEFAULT = 14
 LIBRARY_FINE_PER_DAY = "1.00"
 LIBRARY_GRACE_DAYS = 0
 LIBRARY_MAX_FINE = None
+LIBRARY_MAX_ACTIVE_LOANS = 5
 DEFAULT_BOOK_COVER = "defaults/default_book_cover.jpg"  # optional
 
 
@@ -268,3 +271,27 @@ CELERY_BEAT_SCHEDULE = {
         "schedule": crontab(day_of_week="sun", hour=2, minute=0),
     },
 }
+
+
+SPECTACULAR_SETTINGS = {
+    "TITLE": "ILAS Library Management API",
+    "DESCRIPTION": "Comprehensive API documentation for ILAS (Innovative Library Automation System)",
+    "VERSION": "1.0.0",
+    "SERVE_INCLUDE_SCHEMA": False,
+    "CONTACT": {"name": "ILAS Dev Team", "email": "support@ilas-system.local"},
+    "LICENSE": {"name": "MIT License"},
+    "SCHEMA_PATH_PREFIX": r"/api/v1/",
+    "SCHEMA_COERCE_PATH_PK_SUFFIX": True,  # auto-detects primary key params
+    "COMPONENT_SPLIT_REQUEST": True,        # separates input/output schemas
+    "SORT_OPERATIONS": True,                # keeps endpoints alphabetical
+    "SORT_OPERATIONS_ALPHABETICALLY": True,
+    "POSTPROCESSING_HOOKS": [],             # optional custom cleanup
+}
+
+REST_FRAMEWORK.update({
+    "DEFAULT_THROTTLE_CLASSES": ["rest_framework.throttling.ScopedRateThrottle"],
+    "DEFAULT_THROTTLE_RATES": {
+        "docs": "5/min",
+        "reports": "10/min",
+    },
+})

@@ -1,27 +1,13 @@
 # library/serializers.py
-"""
-ILAS – Final DRF Serializers (Audit-Safe, Non-Recursive)
---------------------------------------------------------
-• Book CRUD (status-safe)
-• BookTransaction validation (Issue / Return / Lost / Damaged / etc.)
-• AuditLog exposure
-• Bulk Book Import validation (Excel rows)
-• Fully aligned with corrected models, signals, and admin
-"""
-
 from decimal import Decimal
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
-from django.db import transaction
 from django.utils import timezone
 from rest_framework import serializers
 
 from .models import Book, BookTransaction, AuditLog
 
 
-# ----------------------------------------------------------------------
-#  Book Serializer
-# ----------------------------------------------------------------------
 class BookSerializer(serializers.ModelSerializer):
     issued_to_name = serializers.ReadOnlyField(source="issued_to.username", default=None)
     last_modified_by_name = serializers.ReadOnlyField(source="last_modified_by.username", default=None)
@@ -45,6 +31,12 @@ class BookSerializer(serializers.ModelSerializer):
             "created_at", "updated_at",
         ]
 
+    def validate(self, attrs):
+        # Ensure API create has defaults for required fields
+        attrs.setdefault("category", "General")
+        attrs.setdefault("shelf_location", "Unassigned")
+        return attrs
+
     def validate_status(self, value):
         valid = [k for k, _ in Book.STATUS_CHOICES]
         if value not in valid:
@@ -57,17 +49,11 @@ class BookSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {"status": "Cannot manually set to ISSUED — use BookTransaction ISSUE instead."}
             )
-
-        # Prevent edits when book is issued
         if instance.status == Book.STATUS_ISSUED:
             raise serializers.ValidationError("Cannot edit a book that is currently issued.")
-
         return super().update(instance, validated_data)
 
 
-# ----------------------------------------------------------------------
-#  BookTransaction Serializer
-# ----------------------------------------------------------------------
 class BookTransactionSerializer(serializers.ModelSerializer):
     member_name = serializers.ReadOnlyField(source="member.username")
     actor_name = serializers.ReadOnlyField(source="actor.username", default=None)
@@ -101,58 +87,65 @@ class BookTransactionSerializer(serializers.ModelSerializer):
         if not member:
             raise serializers.ValidationError({"member": "Member is required."})
 
-        # ISSUE validation
+        # ISSUE validation (R1.01-R1.04)
         if txn_type == BookTransaction.TYPE_ISSUE:
             if not book.can_be_issued():
                 raise serializers.ValidationError({"book": "Book is not available for issue."})
-            if BookTransaction.objects.filter(book=book, is_active=True, txn_type=BookTransaction.TYPE_ISSUE).exists():
-                raise serializers.ValidationError({"book": "This book already has an active issue."})
+            if not getattr(member, "is_active", True):
+                raise serializers.ValidationError({"member": "Member is not active."})
+            if BookTransaction.objects.filter(book=book, txn_type=BookTransaction.TYPE_ISSUE, is_active=True).exists():
+                raise serializers.ValidationError({"book": "Book already has an active issue."})
 
-        # RETURN validation
-        elif txn_type == BookTransaction.TYPE_RETURN:
-            active_issue = BookTransaction.objects.filter(
-                book=book, member=member, is_active=True, txn_type=BookTransaction.TYPE_ISSUE
-            ).first()
+        # RETURN validation (R2.01-R2.05)
+        if txn_type == BookTransaction.TYPE_RETURN:
+            active_issue = BookTransaction.objects.filter(book=book, txn_type=BookTransaction.TYPE_ISSUE, is_active=True).first()
             if not active_issue:
-                raise serializers.ValidationError({"txn_type": "No active ISSUE for this book and member."})
+                raise serializers.ValidationError({"txn_type": "No active ISSUE for this book."})
+            if member and active_issue.member and (active_issue.member.pk != member.pk):
+                raise serializers.ValidationError({"member": "Return must be by same member who issued the book."})
+            ret_date = attrs.get("return_date")
+            if ret_date and ret_date > timezone.now():
+                raise serializers.ValidationError({"return_date": "Return date cannot be in the future."})
 
         return attrs
+    
+    def update(self, instance, validated_data):
+        # Prevent editing immutable fields like fine_amount
+        if "fine_amount" in validated_data and validated_data["fine_amount"] != instance.fine_amount:
+            raise serializers.ValidationError({"fine_amount": "Fine records are immutable once set."})
+        return super().update(instance, validated_data)
+
 
     def create(self, validated_data):
-        """Creates a BookTransaction respecting model logic and audit flow."""
+        txn_type = validated_data.get("txn_type")
+        book = validated_data.get("book")
+        member = validated_data.get("member")
         request = self.context.get("request")
-        actor = None
-        if request and hasattr(request, "user"):
-            actor = request.user
-        validated_data["actor"] = actor
-
-        book = validated_data["book"]
-        txn_type = validated_data["txn_type"]
-        member = validated_data["member"]
+        actor = getattr(request, "user", None)
         remarks = validated_data.get("remarks", "")
 
-        with transaction.atomic():
-            if txn_type == BookTransaction.TYPE_ISSUE:
-                txn = book.mark_issued(member=member, actor=actor, remarks=remarks)
-            elif txn_type == BookTransaction.TYPE_RETURN:
-                txn = book.mark_returned(actor=actor, remarks=remarks)
-            elif txn_type in [
-                BookTransaction.TYPE_LOST,
-                BookTransaction.TYPE_DAMAGED,
-                BookTransaction.TYPE_MAINTENANCE,
-                BookTransaction.TYPE_REMOVED,
-            ]:
-                txn = book.mark_status(txn_type, actor=actor, remarks=remarks)
-            else:
-                raise serializers.ValidationError({"txn_type": "Invalid transaction type."})
-            return txn
+        if txn_type == BookTransaction.TYPE_ISSUE:
+            # Use the model method for atomic issue
+            return book.mark_issued(member=member, actor=actor, remarks=remarks)
+
+        elif txn_type == BookTransaction.TYPE_RETURN:
+            # Align with model's updated signature
+            return book.mark_returned(actor=actor, returned_by=member, remarks=remarks)
+
+        elif txn_type in {
+            BookTransaction.TYPE_LOST,
+            BookTransaction.TYPE_DAMAGED,
+            BookTransaction.TYPE_MAINTENANCE,
+            BookTransaction.TYPE_REMOVED,
+        }:
+            return book.mark_status(txn_type, actor=actor, remarks=remarks)
+
+        raise serializers.ValidationError({"txn_type": "Invalid transaction type."})
 
 
-# ----------------------------------------------------------------------
-#  AuditLog Serializer
-# ----------------------------------------------------------------------
+
 class AuditLogSerializer(serializers.ModelSerializer):
-    actor_name = serializers.ReadOnlyField(source="actor.username", default=None)
+    actor_name = serializers.SerializerMethodField()
 
     class Meta:
         model = AuditLog
@@ -162,10 +155,10 @@ class AuditLogSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ["id", "timestamp", "actor_name"]
 
+        def get_actor_name(self, obj):
+            return getattr(obj.actor, "username", "System")
 
-# ----------------------------------------------------------------------
-#  Bulk Book Import Serializer
-# ----------------------------------------------------------------------
+
 class BulkBookImportSerializer(serializers.Serializer):
     """Validates each Excel row for bulk uploads."""
 
@@ -188,18 +181,17 @@ class BulkBookImportSerializer(serializers.Serializer):
     book_cost = serializers.DecimalField(required=False, max_digits=10, decimal_places=2, allow_null=True)
     vendor_name = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     source = serializers.CharField(required=False, allow_blank=True, allow_null=True)
-    accession_no = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    accession_no = serializers.CharField(required=False, allow_blank=True , allow_null=True)
     library_section = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     dewey_decimal = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     cataloger = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     remarks = serializers.CharField(required=False, allow_blank=True, allow_null=True)
 
     def validate(self, attrs):
-        """Normalize None → '' for all text fields."""
-        for field, value in attrs.items():
+        """Normalize None -> '' and ensure required fields present."""
+        for field, value in list(attrs.items()):
             if value is None:
                 attrs[field] = ""
-        # Ensure required fields exist
         if not attrs.get("title"):
             raise serializers.ValidationError({"title": "Title is required."})
         if not attrs.get("author"):
@@ -211,7 +203,6 @@ class BulkBookImportSerializer(serializers.Serializer):
         if not attrs.get("shelf_location"):
             raise serializers.ValidationError({"shelf_location": "Shelf location is required."})
         return attrs
-
 
     def validate_publication_year(self, value):
         if value is None:
@@ -234,4 +225,21 @@ class BulkBookImportSerializer(serializers.Serializer):
         book = Book(**book_data)
         book._suppress_audit = True  # mark before saving to skip per-row audits
         book.save()
+        book._suppress_audit = False
         return book
+
+# ----------------------------------------------------------------------
+# PUBLIC SERIALIZER (Safe for Student/Members)
+# ----------------------------------------------------------------------
+class PublicBookSerializer(serializers.ModelSerializer):
+    issued_to_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Book
+        fields = [
+            "id", "book_code", "title", "author", "isbn", "category",
+            "status", "shelf_location", "issued_to_name",
+        ]
+
+    def get_issued_to_name(self, obj):
+        return obj.issued_to.username if obj.issued_to else None

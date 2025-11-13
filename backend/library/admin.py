@@ -18,7 +18,7 @@ from django.core.files.base import ContentFile
 from django.db import transaction
 
 from .models import Book, BookTransaction, AuditLog
-from .serializers import BulkBookImportSerializer
+from .serializers import BookTransactionSerializer, BulkBookImportSerializer
 from .models import create_audit
 
 
@@ -81,128 +81,213 @@ class BookAdmin(admin.ModelAdmin):
         ]
         return custom_urls + urls
 
-    # ------------------------------------------------------------------
-    # BULK UPLOAD
+        # ------------------------------------------------------------------
+    # BULK UPLOAD (Excel + ZIP)
     # ------------------------------------------------------------------
     def bulk_upload_view(self, request):
-        """Handle Excel + ZIP bulk import."""
-        if request.method == "POST":
-            excel_file = request.FILES.get("file")
-            images_zip = request.FILES.get("images")
-            if not excel_file:
-                messages.error(request, "Excel file is required.")
-                return redirect("..")
+        """Handle Excel + ZIP bulk import with audit suppression."""
+        if request.method != "POST":
+            return render(request, "admin/library/book_bulk_upload.html")
 
-            images_map = {}
-            if images_zip:
-                try:
-                    with zipfile.ZipFile(images_zip) as z:
-                        for name in z.namelist():
-                            base = name.split("/")[-1].lower()
-                            if base.endswith((".jpg", ".jpeg", ".png")):
-                                images_map[base] = z.read(name)
-                except zipfile.BadZipFile:
-                    messages.warning(request, "Invalid ZIP file uploaded.")
+        excel_file = request.FILES.get("file")
+        images_zip = request.FILES.get("images")
 
+        if not excel_file:
+            messages.error(request, "Excel file is required.")
+            return redirect("..")
+
+        # ----------------------------------------------------------
+        # Step 1: Load images from ZIP (if provided)
+        # ----------------------------------------------------------
+        images_map = {}
+        if images_zip:
             try:
-                wb = openpyxl.load_workbook(excel_file, data_only=True)
-                ws = wb.active
-                header = [str(c.value).strip().lower() if c.value else "" for c in ws[1]]
-            except Exception as e:
-                messages.error(request, f"Excel error: {e}")
-                return redirect("..")
+                with zipfile.ZipFile(images_zip) as z:
+                    for name in z.namelist():
+                        base = name.split("/")[-1].lower()
+                        if base.endswith((".jpg", ".jpeg", ".png")):
+                            images_map[base] = z.read(name)
+            except zipfile.BadZipFile:
+                messages.warning(request, "⚠️ Invalid ZIP file uploaded. Skipping images.")
 
-            created, errors = 0, []
-            for i, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
-                if not row or all(v in (None, "") for v in row):
-                    continue
-                data = dict(zip(header, row))
-                serializer = BulkBookImportSerializer(data=data)
-                try:
-                    serializer.is_valid(raise_exception=True)
-                    book = Book(**serializer.validated_data, last_modified_by=request.user)
-                    # Prevent per-row audit logs during bulk import
-                    book._suppress_audit = True
-                    book.save()
-                    for key in [
-                        f"{(book.isbn or '').strip().lower()}.jpg",
-                        f"{(book.title or '').strip().lower()}.jpg",
-                    ]:
-                        if key in images_map:
-                            book.cover_image.save(f"{book.book_code}.jpg", ContentFile(images_map[key]), save=True)
-                            break
-                    created += 1
-                except Exception as e:
-                    errors.append(f"Row {i}: {e}")
+        # ----------------------------------------------------------
+        # Step 2: Parse Excel
+        # ----------------------------------------------------------
+        try:
+            wb = openpyxl.load_workbook(excel_file, data_only=True)
+            ws = wb.active
+            header = [str(c.value).strip().lower() if c.value else "" for c in ws[1]]
 
-            # One audit for the whole bulk import
+            # Deduplicate header columns (avoid collisions)
+            seen = {}
+            for i, h in enumerate(header):
+                if h in seen:
+                    seen[h] += 1
+                    header[i] = f"{h}_{seen[h]}"
+                else:
+                    seen[h] = 1
+
+        except Exception as e:
+            messages.error(request, f"Excel error: {e}")
+            return redirect("..")
+
+        # ----------------------------------------------------------
+        # Step 3: Process rows
+        # ----------------------------------------------------------
+        created, errors = 0, []
+        try:
+            with transaction.atomic():
+                for i, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
+                    if not row or all(v in (None, "") for v in row):
+                        continue
+
+                    data = dict(zip(header, row))
+                    serializer = BulkBookImportSerializer(data=data)
+                    try:
+                        serializer.is_valid(raise_exception=True)
+                        book = Book(**serializer.validated_data, last_modified_by=request.user)
+                        book._suppress_audit = True
+                        book.save()
+
+                        # Optional cover assignment
+                        for key in [
+                            f"{(book.isbn or '').strip().lower()}.jpg",
+                            f"{(book.title or '').strip().lower()}.jpg",
+                        ]:
+                            if key in images_map:
+                                book.cover_image.save(f"{book.book_code}.jpg", ContentFile(images_map[key]), save=True)
+                                break
+
+                        created += 1
+                    except Exception as e:
+                        errors.append(f"Row {i}: {e}")
+                        continue
+
+            # ------------------------------------------------------
+            # Step 4: Single bulk audit entry
+            # ------------------------------------------------------
             create_audit(
                 actor=request.user,
                 action=AuditLog.ACTION_BULK_UPLOAD,
                 target_type="Book",
                 target_id="BulkImport",
                 new_values={"books_created": created},
-                remarks=f"Bulk uploaded {created} books",
+                remarks=f"Bulk uploaded {created} books via admin interface",
                 source="admin-ui",
             )
 
-            if created:
-                messages.success(request, f"✅ {created} books uploaded successfully.")
-            if errors:
-                messages.warning(request, f"⚠️ {len(errors)} rows failed. Example: {errors[:3]}")
+        except Exception as e:
+            messages.error(request, f"Bulk upload failed: {e}")
             return redirect("..")
 
-        return render(request, "admin/library/book_bulk_upload.html")
+        # ----------------------------------------------------------
+        # Step 5: Feedback
+        # ----------------------------------------------------------
+        if created:
+            messages.success(request, f"✅ {created} books uploaded successfully.")
+        if errors:
+            sample = errors[:3]
+            messages.warning(request, f"⚠️ {len(errors)} rows failed. Example: {sample}")
+        return redirect("..")
+
 
     # ------------------------------------------------------------------
-    # ISSUE / RETURN
+    # ISSUE / RETURN (Validated, Audit-Safe)
     # ------------------------------------------------------------------
     def issue_book_view(self, request):
-        """Admin interface for issuing a book."""
+        """Admin interface for issuing a book (with validation)."""
         from django.contrib.auth import get_user_model
         User = get_user_model()
 
         if request.method == "POST":
             book_id = request.POST.get("book_id")
             member_id = request.POST.get("member_id")
-            remarks = request.POST.get("remarks", "")
+            remarks = request.POST.get("remarks", "").strip()
             book = Book.objects.filter(id=book_id).first()
             member = User.objects.filter(id=member_id).first()
+
             if not book or not member:
-                messages.error(request, "Invalid book or member selection.")
+                messages.error(request, "Invalid book or member.")
                 return redirect("..")
+
+            # inside admin view function before calling book.mark_issued
+            if not book.can_be_issued():
+                messages.error(request, f"Book {book.book_code} is not available for issue.")
+                return redirect(request.path)  # or appropriate view
+            # Prefer serializer:
+            serializer = BookTransactionSerializer(data={
+                "book": book.id, "member": member.id, "txn_type": BookTransaction.TYPE_ISSUE
+            }, context={"request": request})
+            if not serializer.is_valid():
+                messages.error(request, f"Cannot issue: {serializer.errors}")
+                return redirect(request.path)
+            # txn = serializer.save()
+            # messages.success(request, f"Issued {book.book_code} to {member.username}")
+
+            # active_txn = BookTransaction.objects.filter(
+            #     book=book, txn_type=BookTransaction.TYPE_ISSUE, is_active=True
+            # ).first()
+            # if active_txn:
+            #     messages.error(request, f"Book {book.book_code} is already issued to {active_txn.member}.")
+            #     return redirect("..")
             try:
                 with transaction.atomic():
-                    book.mark_issued(member=member, actor=request.user, remarks=remarks)
-                    messages.success(request, f"Book {book.book_code} issued to {member.username}.")
+                    serializer.is_valid(raise_exception=True)
+                    txn = serializer.save()
+                    messages.success(request, f"✅ {book.book_code} issued to {member.username}.")
             except Exception as e:
                 messages.error(request, f"Issue failed: {e}")
             return redirect("..")
-
-        books = Book.objects.filter(status=Book.STATUS_AVAILABLE)[:50]
-        context = {"books": books}
+        
+        # --- GET: show available books ---
+        books = Book.objects.filter(status=Book.STATUS_AVAILABLE)
+        context = {"books": books[:200]}  # increased limit
         return render(request, "admin/library/issue_book.html", context)
 
+
     def return_book_view(self, request):
-        """Admin interface for returning a book."""
+        """Admin interface for returning a book (same-member validation)."""
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+
         if request.method == "POST":
             book_id = request.POST.get("book_id")
-            remarks = request.POST.get("remarks", "")
+            member_id = request.POST.get("member_id")
+            remarks = request.POST.get("remarks", "").strip()
             book = Book.objects.filter(id=book_id).first()
-            if not book:
-                messages.error(request, "Invalid book.")
+            member = User.objects.filter(id=member_id).first()
+
+            if not book or not member:
+                messages.error(request, "Invalid book or member.")
                 return redirect("..")
+
+            active_txn = BookTransaction.objects.filter(
+                book=book, txn_type=BookTransaction.TYPE_ISSUE, is_active=True
+            ).first()
+            if not active_txn:
+                messages.error(request, f"No active issue found for {book.book_code}.")
+                return redirect("..")
+
+            # --- Enforce same-member return ---
+            if str(active_txn.member.id) != str(member.id):
+                messages.error(request, f"Book {book.book_code} was issued to {active_txn.member.username}.")
+                return redirect("..")
+
             try:
                 with transaction.atomic():
                     book.mark_returned(actor=request.user, remarks=remarks)
-                    messages.success(request, f"Book {book.book_code} returned successfully.")
-            except Exception as e:
+                    messages.success(request, f"✅ {book.book_code} returned successfully.")
+            except ValueError as e:
                 messages.error(request, f"Return failed: {e}")
+            except Exception as e:
+                messages.error(request, f"Unexpected error: {e}")
             return redirect("..")
 
-        books = Book.objects.filter(status=Book.STATUS_ISSUED)[:50]
-        context = {"books": books}
+        # --- GET: show issued books ---
+        issued_books = Book.objects.filter(status=Book.STATUS_ISSUED)
+        context = {"books": issued_books[:200]}
         return render(request, "admin/library/return_book.html", context)
+
 
     # ------------------------------------------------------------------
     # SAVE + DELETE (AUDIT-SAFE)

@@ -12,6 +12,7 @@ Implements:
 
 import io
 import csv
+from venv import logger
 import zipfile
 import openpyxl
 from datetime import datetime, timezone as dt_timezone
@@ -23,7 +24,9 @@ from django.utils import timezone
 from django.shortcuts import get_object_or_404
 from django.core.files.base import ContentFile
 from django.db.models import Q
+from rest_framework.permissions import IsAuthenticated, IsAdminUser, AllowAny
 from .permissions import IsAdminOrReadOnly
+
 
 
 from rest_framework import viewsets, status, mixins, serializers
@@ -40,6 +43,7 @@ from .serializers import (
     BookTransactionSerializer,
     AuditLogSerializer,
     BulkBookImportSerializer,
+    PublicBookSerializer,
 )
 
 User = get_user_model()
@@ -162,7 +166,8 @@ class BookViewSet(viewsets.ModelViewSet):
                         break
                 created += 1
             except Exception as e:
-                failed.append(f"Row {i}: {e}")
+                logger.warning("Bulk upload row %d failed: %s", i, e)
+                failed.append(f"Row {i}: {str(e)[:200]}")
 
         create_audit(
             request.user,
@@ -187,13 +192,55 @@ class BookViewSet(viewsets.ModelViewSet):
             qs = qs.filter(Q(title__icontains=q) | Q(isbn__icontains=q) | Q(book_code__icontains=q))
         serializer = self.get_serializer(qs[:25], many=True)
         return Response(serializer.data)
+    
+    # ------------------------
+    # Public Book Listing (safe, read-only)
+    # ------------------------
+    @action(detail=False, methods=["get"], permission_classes=[AllowAny], url_path="public")
+    def public(self, request):
+        """Publicly accessible book list (no auth)."""
+        search = request.query_params.get("q", "").strip()
+        qs = Book.objects.filter(is_active=True)
+        if search:
+            qs = qs.filter(Q(title__icontains=search) | Q(author__icontains=search))
+        data = PublicBookSerializer(qs[:100], many=True).data
+        return Response(data, status=200)
 
 
 # ----------------------------------------------------------
-# Transactions: Issue / Return / Status
+# Transactions: Issue / Return / Status (Fully Validated)
 # ----------------------------------------------------------
+
 class IssueBookAPIView(APIView):
+    """Issue a book to a member with validation."""
     permission_classes = [IsAdminUser]
+
+    def post(self, request):
+        serializer = BookTransactionSerializer(
+            data={
+                "book": request.data.get("book_id"),
+                "member": request.data.get("member_id"),
+                "txn_type": BookTransaction.TYPE_ISSUE,
+                "remarks": request.data.get("remarks", ""),
+            },
+            context={"request": request},
+        )
+
+        try:
+            serializer.is_valid(raise_exception=True)
+            txn = serializer.save()
+            return Response(BookTransactionSerializer(txn).data, status=201)
+        except serializers.ValidationError as e:
+            return Response({"errors": e.detail}, status=400)
+        except ValueError as e:
+            return Response({"detail": str(e)}, status=400)
+        except Exception as e:
+            return Response({"detail": f"Unexpected error: {e}"}, status=500)
+
+
+class ReturnBookAPIView(APIView):
+    """Handles book return operations with same-member validation and fine calculation."""
+    permission_classes = [IsAuthenticated]
 
     def post(self, request):
         book_id = request.data.get("book_id")
@@ -201,55 +248,62 @@ class IssueBookAPIView(APIView):
         remarks = request.data.get("remarks", "")
 
         if not book_id or not member_id:
-            return Response({"detail": "book_id and member_id required."}, status=400)
+            return Response({"detail": "book_id and member_id are required."}, status=400)
 
+        # Fetch book and member
         book = get_object_or_404(Book, pk=book_id)
-        member = get_object_or_404(User, pk=member_id)
+        member = get_object_or_404(get_user_model(), pk=member_id)
 
         try:
-            txn = book.mark_issued(member=member, actor=request.user, remarks=remarks)
-            return Response(BookTransactionSerializer(txn).data, status=201)
+            # Call the model method that handles validation + atomic locking
+            txn = book.mark_returned(
+                actor=request.user,
+                returned_by=member,
+                remarks=remarks,
+            )
+
+            return Response(
+                {
+                    "detail": "Book returned successfully.",
+                    "book_code": book.book_code,
+                    "fine_amount": str(txn.fine_amount),
+                },
+                status=200,
+            )
+
         except ValueError as e:
+            # Expected business validation failures
             return Response({"detail": str(e)}, status=400)
-
-
-class ReturnBookAPIView(APIView):
-    permission_classes = [IsAdminUser]
-
-    def post(self, request):
-        book_id = request.data.get("book_id")
-        remarks = request.data.get("remarks", "")
-        book = get_object_or_404(Book, pk=book_id)
-
-        try:
-            book.mark_returned(actor=request.user, remarks=remarks)
-            return Response({"detail": "Book returned successfully.", "book_code": book.book_code}, status=200)
-        except ValueError as e:
-            return Response({"detail": str(e)}, status=400)
-
+        except Exception as e:
+            logger.exception("ReturnBookAPIView failed: %s", e)
+            return Response({"detail": f"Unexpected error: {e}"}, status=500)
 
 class UpdateBookStatusAPIView(APIView):
     """Handles Lost / Damaged / Maintenance / Available"""
-
     permission_classes = [IsAdminUser]
 
     def post(self, request):
         book_id = request.data.get("book_id")
         status_type = str(request.data.get("status", "")).upper()
         remarks = request.data.get("remarks", "")
+
         book = get_object_or_404(Book, pk=book_id)
 
-        if status_type == "AVAILABLE":
-            book.status = Book.STATUS_AVAILABLE
-            book.issued_to = None
-            book.save(update_fields=["status", "issued_to", "updated_at"])
-            create_audit(request.user, AuditLog.ACTION_STATUS_CHANGE, "Book", book.book_code,
-                         new_values={"status": book.status}, remarks=remarks, source="admin-ui")
-            return Response({"book_code": book.book_code, "status": book.status}, status=200)
-
         try:
-            book.mark_status(status_type, actor=request.user, remarks=remarks)
-            return Response({"book_code": book.book_code, "status": book.status}, status=200)
+            if status_type == "AVAILABLE":
+                # Only allow AVAILABLE if not issued
+                if book.status == Book.STATUS_ISSUED:
+                    return Response(
+                        {"detail": "Use the Return endpoint for issued books."}, status=400
+                    )
+                book.mark_status("MAINTENANCE" if book.status == Book.STATUS_MAINTENANCE else "AVAILABLE",
+                                 actor=request.user, remarks=remarks)
+            else:
+                txn = book.mark_status(status_type, actor=request.user, remarks=remarks)
+            return Response(
+                {"book_code": book.book_code, "status": book.status},
+                status=200,
+            )
         except ValueError as e:
             return Response({"detail": str(e)}, status=400)
 
@@ -353,3 +407,80 @@ def admin_active_transactions(request):
         for t in txns
     ]
     return JsonResponse(data, safe=False)
+
+
+# ----------------------------------------------------------
+# BOOK LOOKUP API (Barcode / Search Integration)
+# ----------------------------------------------------------
+class BookLookupView(APIView):
+    """Fetch book details by barcode (book_code) for scanning."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, book_code):
+        book = get_object_or_404(Book, book_code__iexact=book_code)
+        data = {
+            "book_code": book.book_code,
+            "title": book.title,
+            "author": book.author,
+            "isbn": book.isbn,
+            "status": book.status,
+            "shelf_location": book.shelf_location,
+            "issued_to": book.issued_to.username if book.issued_to else None,
+            "due_date": None,
+        }
+        # If book is issued, include due_date
+        if book.status == Book.STATUS_ISSUED:
+            txn = (
+                BookTransaction.objects.filter(
+                    book=book, txn_type=BookTransaction.TYPE_ISSUE, is_active=True
+                )
+                .order_by("-created_at")
+                .first()
+            )
+            if txn:
+                data["due_date"] = txn.due_date.isoformat() if txn.due_date else None
+        return Response(data, status=200)
+
+# ----------------------------------------------------------
+# ACTIVE TRANSACTIONS API (Real-Time Issued Books)
+# ----------------------------------------------------------
+class ActiveTransactionsView(APIView):
+    """List all currently active issue transactions."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        member_id = request.query_params.get("member_id")
+        qs = BookTransaction.objects.filter(txn_type=BookTransaction.TYPE_ISSUE, is_active=True).select_related("book", "member")
+        if member_id:
+            qs = qs.filter(member__id=member_id)
+        data = []
+        for t in qs:
+            due_days = (timezone.now().date() - t.due_date.date()).days if t.due_date else 0
+            overdue = max(0, due_days)
+            data.append({
+                "transaction_id": t.id,
+                "book_code": t.book.book_code,
+                "title": t.book.title,
+                "member_name": t.member.username if t.member else None,
+                "member_id": t.member.id if t.member else None,
+                "issue_date": t.issue_date,
+                "due_date": t.due_date,
+                "days_overdue": overdue,
+                "fine_estimate": str(t.fine_amount),
+            })
+        return Response(data, status=200)
+
+
+# ----------------------------------------------------------------------
+# PUBLIC BOOK LIST (Safe Read-Only)
+# ----------------------------------------------------------------------
+class PublicBookListView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        search = request.query_params.get("q")
+        qs = Book.objects.filter(is_active=True)
+        if search:
+            qs = qs.filter(Q(title__icontains=search) | Q(author__icontains=search))
+        data = PublicBookSerializer(qs[:100], many=True).data
+        return Response(data, status=200)
