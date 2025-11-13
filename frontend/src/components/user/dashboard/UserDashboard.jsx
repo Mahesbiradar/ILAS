@@ -1,10 +1,12 @@
 // src/components/user/dashboard/UserDashboard.jsx
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Loader, Card, PageTitle, SectionHeader } from "../../common";
 import DashboardCard from "../../common/DashboardCard";
 import UserTransactionList from "../transactions/UserTransactionList";
 import { Book, Clock, CheckCircle } from "lucide-react";
+import { getActiveTransactions } from "../../../services/transactionApi";
+import toast from "react-hot-toast";
 
 export default function UserDashboard() {
   const [stats, setStats] = useState({
@@ -15,21 +17,34 @@ export default function UserDashboard() {
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
-  useEffect(() => {
-    loadUserStats();
-  }, []);
-
-  const loadUserStats = async () => {
+  const loadUserStats = useCallback(async () => {
     try {
-      // TODO: Update with actual API call when ready
-      // const data = await getBorrowHistory();
-      setStats({ borrowed: 0, returned: 0, pending: 0 });
+      setLoading(true);
+      
+      // Fetch counts for each status using limit=1 to minimize payload
+      const [borrowedRes, returnedRes, pendingRes] = await Promise.all([
+        getActiveTransactions({ page: 1, page_size: 1, status: "approved" }),
+        getActiveTransactions({ page: 1, page_size: 1, status: "returned" }),
+        getActiveTransactions({ page: 1, page_size: 1, status: "pending" }),
+      ]);
+
+      setStats({
+        borrowed: borrowedRes.count || 0,
+        returned: returnedRes.count || 0,
+        pending: pendingRes.count || 0,
+      });
     } catch (err) {
-      console.error("Error loading user dashboard:", err);
+      console.error("Error loading user dashboard stats:", err);
+      toast.error("Failed to load dashboard statistics.");
+      setStats({ borrowed: 0, returned: 0, pending: 0 });
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    loadUserStats();
+  }, [loadUserStats]);
 
   if (loading) return <Loader />;
 
