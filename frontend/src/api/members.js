@@ -1,9 +1,23 @@
 // src/api/members.js
 import api from "./axios"; // ✅ your configured axios instance (includes baseURL + auth headers)
 
-// ✅ Fetch all members (Admins, Librarians, Users)
-export async function fetchMembers() {
-  const res = await api.get("auth/members/");
+// ✅ Fetch all members with pagination, search, and filtering
+export async function fetchMembers(params = {}) {
+  const {
+    page = 1,
+    page_size = 20,
+    search = "",
+    role = "",
+  } = params;
+
+  const res = await api.get("auth/members/", {
+    params: {
+      page,
+      page_size,
+      ...(search && { search }),
+      ...(role && { role }),
+    },
+  });
   return res.data;
 }
 
