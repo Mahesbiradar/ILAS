@@ -1,5 +1,5 @@
 // src/pages/admin/BooksManager.jsx
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef, useCallback } from "react";
 import toast from "react-hot-toast";
 import { BookOpen, Plus, Upload, Edit2, Trash2, Search, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button, Card, PageTitle, SectionHeader, EmptyState, Input, Loader } from "../../components/common";
@@ -7,6 +7,7 @@ import AddBook from "../../components/admin/books/AddBook";
 import EditBook from "../../components/admin/books/EditBook";
 import BulkUploadManager from "../../components/admin/books/BulkUploadManager";
 import { getBooks, deleteBook, bulkDeleteBooks } from "../../api/libraryApi";
+import { usePagination } from "../../hooks/usePagination";
 
 /**
  * BooksManager Page - Modernized
@@ -14,9 +15,6 @@ import { getBooks, deleteBook, bulkDeleteBooks } from "../../api/libraryApi";
  */
 export default function BooksManager() {
   const [books, setBooks] = useState([]);
-  const [pagination, setPagination] = useState({ count: 0, next: null, previous: null });
-  const [page, setPage] = useState(1);
-  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("All");
   const [categories, setCategories] = useState(["All"]);
@@ -24,48 +22,60 @@ export default function BooksManager() {
   const [selectedBook, setSelectedBook] = useState(null);
   const [showEdit, setShowEdit] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const debounceRef = useRef(null);
 
-  const loadBooks = async (p = 1) => {
+  const pagination = usePagination(20);
+
+  const loadBooks = useCallback(async (opts = {}) => {
+    const p = opts.page ?? pagination.page;
+    const s = opts.search ?? search;
+    const c = opts.category ?? category;
+
     try {
       setLoading(true);
-      const params = { page: p, search: search.trim() };
-      if (category !== "All") params.category = category;
+      const params = { page: p, page_size: pagination.pageSize };
+      if (s && s.trim()) params.search = s.trim();
+      if (c !== "All") params.category = c;
+
       const data = await getBooks(params);
-
       setBooks(data.results || []);
-      setPagination({
-        count: data.count || 0,
-        next: data.next,
-        previous: data.previous,
-      });
-      setPage(p);
+      pagination.setPaginationData(data);
+      pagination.setPage(p);
 
+      // Extract categories from results
       const cats = new Set(["All"]);
       (data.results || []).forEach((b) => b.category && cats.add(b.category));
       setCategories(Array.from(cats));
     } catch (err) {
       console.error("loadBooks error:", err);
       toast.error("Failed to load books.");
+      setBooks([]);
     } finally {
       setLoading(false);
     }
-  };
+  }, [pagination, search, category]);
 
+  // Initial load
   useEffect(() => {
-    loadBooks(1);
+    loadBooks({ page: 1, search, category });
   }, []);
 
+  // Debounce search and category changes
   useEffect(() => {
-    const timer = setTimeout(() => loadBooks(1), 400);
-    return () => clearTimeout(timer);
-  }, [search, category]);
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      loadBooks({ page: 1, search, category });
+    }, 400);
+    return () => clearTimeout(debounceRef.current);
+  }, [search, category, loadBooks]);
 
   const handleDelete = async (bookCode) => {
     if (!window.confirm("Delete this book and all its copies?")) return;
     try {
       await deleteBook(bookCode);
       toast.success("Book deleted successfully!");
-      loadBooks(page);
+      loadBooks({ page: pagination.page });
     } catch (err) {
       toast.error("Failed to delete book.");
     }
@@ -76,8 +86,6 @@ export default function BooksManager() {
     { id: "add", label: "Add Book", icon: Plus },
     { id: "bulk", label: "Bulk Upload", icon: Upload },
   ];
-
-  const totalPages = Math.ceil(pagination.count / 20);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 px-4 py-8">
@@ -215,20 +223,20 @@ export default function BooksManager() {
                     variant="outline"
                     size="sm"
                     disabled={!pagination.previous}
-                    onClick={() => loadBooks(page - 1)}
+                    onClick={() => loadBooks({ page: pagination.page - 1 })}
                     className="gap-2"
                   >
                     <ChevronLeft className="w-4 h-4" />
                     Previous
                   </Button>
                   <span className="text-gray-700 dark:text-gray-300 font-medium">
-                    Page {page} of {totalPages || 1}
+                    Page {pagination.page} of {pagination.totalPages || 1}
                   </span>
                   <Button
                     variant="outline"
                     size="sm"
                     disabled={!pagination.next}
-                    onClick={() => loadBooks(page + 1)}
+                    onClick={() => loadBooks({ page: pagination.page + 1 })}
                     className="gap-2"
                   >
                     Next
@@ -246,7 +254,7 @@ export default function BooksManager() {
               <AddBook
                 onClose={() => setShowAdd(false)}
                 onAdded={() => {
-                  loadBooks(1);
+                  loadBooks({ page: 1 });
                   setShowAdd(false);
                 }}
               />
@@ -270,7 +278,7 @@ export default function BooksManager() {
 
         {activeTab === "bulk" && (
           <Card variant="elevated" className="p-6">
-            <BulkUploadManager onUploaded={() => loadBooks(1)} />
+            <BulkUploadManager onUploaded={() => loadBooks({ page: 1 })} />
           </Card>
         )}
 
@@ -281,7 +289,7 @@ export default function BooksManager() {
             onClose={() => setShowEdit(false)}
             onSubmit={() => {
               setShowEdit(false);
-              loadBooks(page);
+              loadBooks({ page: pagination.page });
             }}
           />
         )}
