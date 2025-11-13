@@ -1,11 +1,12 @@
 // src/pages/admin/LibraryOperations.jsx
-import React, { useState } from "react";
+import React, { useState, useCallback } from "react";
 import toast from "react-hot-toast";
-import { Zap, RotateCcw, Settings } from "lucide-react";
+import { Zap, RotateCcw, Settings, Loader } from "lucide-react";
 import { Button, Card, PageTitle, SectionHeader } from "../../components/common";
 import BarcodeScanner from "../../components/admin/libraryOps/BarcodeScanner";
 import ManualScanInput from "../../components/admin/libraryOps/ManualScanInput";
 import ScanResultCard from "../../components/admin/libraryOps/ScanResultCard";
+import { lookupBookByCode, issueBook, returnBook, updateBookStatus } from "../../services/transactionApi";
 
 /**
  * LibraryOperations Page
@@ -13,17 +14,104 @@ import ScanResultCard from "../../components/admin/libraryOps/ScanResultCard";
  * - Tab 1: Issue Book (scan barcode + issue to user)
  * - Tab 2: Return Book (scan barcode + mark returned)
  * - Tab 3: Update Status (change book status)
- * - Tab 4: Barcode Lookup (search by barcode)
  */
 export default function LibraryOperations() {
   const [activeTab, setActiveTab] = useState("issue");
   const [scanResult, setScanResult] = useState(null);
   const [useScannerTab, setUseScannerTab] = useState("scanner");
+  const [loading, setLoading] = useState(false);
+  const [memberId, setMemberId] = useState("");
+  const [dueDate, setDueDate] = useState("");
+  const [newStatus, setNewStatus] = useState("AVAILABLE");
+  const [remarks, setRemarks] = useState("");
 
-  const handleScan = (code) => {
-    // TODO: Call transactionApi to lookup book and prefill form
-    toast.success(`Scanned: ${code}`);
-    setScanResult({ copy_id: code, book_title: "Sample Book", author: "Author", category: "Category", shelf_number: "A1", status: "Available" });
+  const handleScan = useCallback(async (code) => {
+    try {
+      setLoading(true);
+      const bookData = await lookupBookByCode(code);
+      
+      // Normalize the API response
+      setScanResult({
+        book_code: bookData.book_code || code,
+        book_title: bookData.title || "Unknown",
+        author: bookData.author || "Unknown",
+        category: bookData.category || "Unknown",
+        shelf_location: bookData.shelf_location || "N/A",
+        status: bookData.status || "Unknown",
+        issued_to: bookData.issued_to || null,
+        due_date: bookData.due_date || null,
+      });
+      toast.success(`Book scanned: ${bookData.title || code}`);
+    } catch (err) {
+      console.error("Lookup error:", err);
+      toast.error(err.message || "Book not found");
+      setScanResult(null);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const handleIssueBook = async () => {
+    if (!scanResult || !memberId || !dueDate) {
+      toast.error("Please fill in all required fields");
+      return;
+    }
+
+    try {
+      setLoading(true);
+      await issueBook(scanResult.book_code, memberId, remarks);
+      toast.success("Book issued successfully!");
+      setScanResult(null);
+      setMemberId("");
+      setDueDate("");
+      setRemarks("");
+    } catch (err) {
+      console.error("Issue error:", err);
+      toast.error(err.message || "Failed to issue book");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleReturnBook = async () => {
+    if (!scanResult) {
+      toast.error("Please scan a book first");
+      return;
+    }
+
+    try {
+      setLoading(true);
+      await returnBook(scanResult.book_code, null, remarks);
+      toast.success("Book marked as returned!");
+      setScanResult(null);
+      setRemarks("");
+    } catch (err) {
+      console.error("Return error:", err);
+      toast.error(err.message || "Failed to mark book as returned");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUpdateStatus = async () => {
+    if (!scanResult || !newStatus) {
+      toast.error("Please select a status");
+      return;
+    }
+
+    try {
+      setLoading(true);
+      await updateBookStatus(scanResult.book_code, newStatus, remarks);
+      toast.success("Book status updated!");
+      setScanResult(null);
+      setNewStatus("AVAILABLE");
+      setRemarks("");
+    } catch (err) {
+      console.error("Status update error:", err);
+      toast.error(err.message || "Failed to update book status");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const tabs = [
@@ -92,9 +180,16 @@ export default function LibraryOperations() {
           {/* Scan Result Card */}
           {scanResult && (
             <ScanResultCard
-              data={scanResult}
-              onApprove={() => toast.success("Book issued!")}
-              onReturn={() => toast.success("Book marked as returned!")}
+              data={{
+                copy_id: scanResult.book_code,
+                book_title: scanResult.book_title,
+                author: scanResult.author,
+                category: scanResult.category,
+                shelf_number: scanResult.shelf_location,
+                status: scanResult.status,
+              }}
+              onApprove={handleIssueBook}
+              onReturn={handleReturnBook}
             />
           )}
 
@@ -106,36 +201,47 @@ export default function LibraryOperations() {
               {activeTab === "status" && "🔄 Update Book Status"}
             </h2>
 
+            {loading && <p className="text-blue-600 mb-4">Processing...</p>}
+
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Copy/Barcode Code *
+                  Scanned Book *
                 </label>
                 <input
                   type="text"
-                  placeholder="Enter or scan barcode"
-                  className="w-full border border-gray-300 rounded-lg px-4 py-2"
+                  value={scanResult ? scanResult.book_title : ""}
+                  disabled
+                  className="w-full border border-gray-300 rounded-lg px-4 py-2 bg-gray-50"
+                  placeholder="Scan a book to prefill"
                 />
               </div>
 
               {(activeTab === "issue" || activeTab === "status") && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    {activeTab === "issue" ? "Member Name *" : "New Status *"}
+                    {activeTab === "issue" ? "Member ID *" : "New Status *"}
                   </label>
                   {activeTab === "issue" ? (
                     <input
                       type="text"
-                      placeholder="Search member..."
+                      value={memberId}
+                      onChange={(e) => setMemberId(e.target.value)}
+                      placeholder="Enter member ID"
                       className="w-full border border-gray-300 rounded-lg px-4 py-2"
                     />
                   ) : (
-                    <select className="w-full border border-gray-300 rounded-lg px-4 py-2">
-                      <option>Available</option>
-                      <option>Issued</option>
-                      <option>Reserved</option>
-                      <option>Damaged</option>
-                      <option>Lost</option>
+                    <select
+                      value={newStatus}
+                      onChange={(e) => setNewStatus(e.target.value)}
+                      className="w-full border border-gray-300 rounded-lg px-4 py-2"
+                    >
+                      <option value="AVAILABLE">Available</option>
+                      <option value="ISSUED">Issued</option>
+                      <option value="DAMAGED">Damaged</option>
+                      <option value="LOST">Lost</option>
+                      <option value="MAINTENANCE">Maintenance</option>
+                      <option value="REMOVED">Removed</option>
                     </select>
                   )}
                 </div>
@@ -148,12 +254,38 @@ export default function LibraryOperations() {
                   </label>
                   <input
                     type="date"
+                    value={dueDate}
+                    onChange={(e) => setDueDate(e.target.value)}
                     className="w-full border border-gray-300 rounded-lg px-4 py-2"
                   />
                 </div>
               )}
 
-              <button className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Remarks (Optional)
+                </label>
+                <textarea
+                  value={remarks}
+                  onChange={(e) => setRemarks(e.target.value)}
+                  placeholder="Add any notes..."
+                  className="w-full border border-gray-300 rounded-lg px-4 py-2"
+                  rows="3"
+                />
+              </div>
+
+              <button
+                onClick={
+                  activeTab === "issue"
+                    ? handleIssueBook
+                    : activeTab === "return"
+                    ? handleReturnBook
+                    : handleUpdateStatus
+                }
+                disabled={loading}
+                className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 font-medium flex items-center justify-center gap-2"
+              >
+                {loading && <Loader className="w-4 h-4 animate-spin" />}
                 {activeTab === "issue" && "📤 Issue Book"}
                 {activeTab === "return" && "📥 Mark as Returned"}
                 {activeTab === "status" && "🔄 Update Status"}
