@@ -82,11 +82,11 @@ export default function Books() {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-2">
-      <h1 className="text-xl font-semibold mb-3">📚 Library Catalog</h1>
+    <div className="max-w-7xl mx-auto px-4 py-3">
+      <h1 className="text-lg font-semibold mb-2">📚 Library Catalog</h1>
 
       {/* Search & Filter Section */}
-      <div className="flex flex-col sm:flex-row gap-3 mb-4">
+      <div className="flex flex-col sm:flex-row gap-2 mb-4">
         <div className="flex-1 flex gap-2">
           <input
             type="text"
@@ -94,11 +94,11 @@ export default function Books() {
             onChange={(e) => setManualSearch(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleSearchClick()}
             placeholder="Search by title, author, ISBN..."
-            className="flex-1 h-10 px-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-200 focus:outline-none"
+            className="flex-1 h-9 px-3 border border-gray-300 rounded-lg focus:ring-1 focus:ring-blue-300 focus:outline-none"
           />
           <button
             onClick={handleSearchClick}
-            className="ml-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
+            className="px-4 py-1 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
           >
             Search
           </button>
@@ -110,7 +110,7 @@ export default function Books() {
             pagination.setPage(1);
             loadBooks({ page: 1, category: e.target.value });
           }}
-          className="h-10 px-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-200 focus:outline-none"
+          className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-1 focus:ring-blue-300 focus:outline-none"
         >
           <option value="">All Categories</option>
           {categories.map((c) => {
@@ -128,9 +128,9 @@ export default function Books() {
       {loading ? (
         <Loader />
       ) : books.length > 0 ? (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 mt-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 place-items-start mt-4">
           {books.map((book) => (
-            <div key={book.book_id || book.id || book.book_code} className="flex justify-center">
+            <div key={book.book_id || book.id || book.book_code} className="w-full flex justify-start">
               <BookCard book={book} />
             </div>
           ))}

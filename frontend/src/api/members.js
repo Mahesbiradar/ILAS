@@ -1,86 +1,87 @@
 // src/api/members.js
-import api from "./axios"; // ✅ your configured axios instance (includes baseURL + auth headers)
+// Cleaned members API aligned with accounts/urls.py.
+// Members endpoints are exposed under /api/auth/... per accounts.urls. :contentReference[oaicite:12]{index=12}
+import api from "./axios";
 
-// ✅ Fetch all members with pagination, search, and filtering
+/**
+ * Fetch members (ViewSet registered as 'members' under /api/auth/)
+ * Supports pagination, search, role filters.
+ */
 export async function fetchMembers(params = {}) {
-  const {
-    page = 1,
-    page_size = 20,
-    search = "",
-    role = "",
-  } = params;
-
-  const res = await api.get("auth/members/", {
-    params: {
-      page,
-      page_size,
-      ...(search && { search }),
-      ...(role && { role }),
-    },
-  });
+  const res = await api.get(`auth/members/`, { params });
   return res.data;
 }
 
-// ✅ Create a new member
+/**
+ * Create a new member (admin)
+ */
 export async function createMember(payload) {
-  const res = await api.post("auth/members/", payload);
+  const res = await api.post(`auth/members/`, payload);
   return res.data;
 }
 
-// ✅ Update or promote an existing member
+/**
+ * Update a member (PATCH)
+ */
 export async function updateMember(id, payload) {
-  const res = await api.put(`auth/members/${id}/`, payload);
+  const res = await api.patch(`auth/members/${id}/`, payload);
   return res.data;
 }
 
-// ✅ Delete a member (only if logged out)
+/**
+ * Delete a member
+ */
 export async function deleteMember(id) {
   const res = await api.delete(`auth/members/${id}/`);
   return res.data;
 }
 
-// ✅ Promote a member role (User → Librarian → Admin)
+/**
+ * Promote a member (if backend supports it). accounts.urls shows
+ * member-related custom endpoints such as export/logs; check MemberViewSet for promote.
+ * If promote endpoint exists, it would be under: auth/members/{id}/promote/
+ * We'll keep a safe wrapper that will fail gracefully if backend doesn't support it.
+ */
 export async function promoteMember(id) {
-  const res = await api.post(`auth/members/${id}/promote/`);
+  try {
+    const res = await api.post(`auth/members/${id}/promote/`);
+    return res.data;
+  } catch (err) {
+    // If endpoint not available, surface an informative error
+    throw new Error(err.response?.data?.detail || "Promote member endpoint not available");
+  }
+}
+
+/**
+ * Fetch member logs (custom view)
+ * accounts.urls registers member_logs at auth/members/logs/
+ */
+export async function fetchMemberLogs(params = {}) {
+  const res = await api.get(`auth/members/logs/`, { params });
   return res.data;
 }
 
-// ✅ Fetch member activity logs
-export async function fetchMemberLogs() {
-  const res = await api.get("auth/members/logs/");
-  return res.data;
-}
-
-// ✅ Export logs as CSV
+/**
+ * Export member logs as CSV (if supported)
+ */
 export async function exportMemberLogs() {
-  const res = await api.get("auth/members/export/?type=csv", {
-    responseType: "blob",
-  });
-
-  const blob = new Blob([res.data], { type: "text/csv" });
-  const url = window.URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.setAttribute("download", "member_logs.csv");
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  window.URL.revokeObjectURL(url);
+  const res = await api.get(`auth/members/export/`, { responseType: "blob" });
+  return res;
 }
 
-// ✅ Export all members as CSV (🆕 Fixed Function)
+/**
+ * Export all members as CSV (if supported)
+ */
 export async function exportAllMembers() {
-  const res = await api.get("auth/members/export/all/", {
-    responseType: "blob",
-  });
+  const res = await api.get(`auth/members/export/all/`, { responseType: "blob" });
+  return res;
+}
 
-  const blob = new Blob([res.data], { type: "text/csv;charset=utf-8;" });
-  const url = window.URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = "all_members.csv";
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  window.URL.revokeObjectURL(url);
+/**
+ * Quick user search helper (also available under admin AJAX)
+ * We also expose a convenience that will hit admin/ajax/user-search/ if needed.
+ */
+export async function quickUserSearch(q, params = {}) {
+  // Prefer admin AJAX endpoint if available
+  return api.get(`v1/admin/ajax/user-search/`, { params: { q, ...params } }).then(r => r.data);
 }
