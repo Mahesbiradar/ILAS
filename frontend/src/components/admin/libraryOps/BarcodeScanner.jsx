@@ -2,70 +2,71 @@
 import React, { useEffect, useRef, useState } from "react";
 import { BrowserMultiFormatReader } from "@zxing/browser";
 
-const BarcodeScanner = ({ onDetected }) => {
+/**
+ * Props:
+ * - onDetected(code)   // called when barcode found
+ * - previewWidth (optional)
+ * - previewHeight (optional)
+ *
+ * This component auto-stops scanning when a code is found.
+ */
+const BarcodeScanner = ({ onDetected, previewWidth = 320, previewHeight = 220 }) => {
   const videoRef = useRef(null);
-  const [isActive, setIsActive] = useState(true);
   const [error, setError] = useState(null);
+  const [active, setActive] = useState(true);
 
   useEffect(() => {
     let mounted = true;
     let codeReader = null;
-    let selectedDeviceId = null;
 
-    const startScan = async () => {
-      // Feature detection: guard against test envs and browsers without camera APIs
+    const start = async () => {
       try {
         if (typeof navigator === "undefined" || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-          throw new Error("Camera not supported in this environment. Use Manual Input tab.");
+          throw new Error("Camera not supported.");
         }
 
         codeReader = new BrowserMultiFormatReader();
 
-        // listVideoInputDevices may throw in some environments; guard it
-        const devices =
-          typeof BrowserMultiFormatReader.listVideoInputDevices === "function"
-            ? await BrowserMultiFormatReader.listVideoInputDevices()
-            : [];
+        // list devices
+        const devices = typeof BrowserMultiFormatReader.listVideoInputDevices === "function"
+          ? await BrowserMultiFormatReader.listVideoInputDevices()
+          : [];
 
         if (!devices || devices.length === 0) {
-          throw new Error("No camera devices found. Use Manual Input tab.");
+          throw new Error("No camera found.");
         }
 
-        selectedDeviceId = devices[0].deviceId;
+        const deviceId = devices[0].deviceId;
 
         if (!videoRef.current) return;
 
-        codeReader.decodeFromVideoDevice(
-          selectedDeviceId,
-          videoRef.current,
-          (result, err) => {
-            if (!mounted) return;
-            if (result) {
-              setIsActive(false);
-              try {
-                onDetected(result.getText());
-              } catch (e) {
-                // swallow handler errors to avoid test failures
-                console.error(e);
-              }
-              try {
-                codeReader && codeReader.reset();
-              } catch (e) {}
-            }
-            if (err && err.name !== "NotFoundException") {
-              // non-fatal scanning errors
-              console.warn(err);
+        codeReader.decodeFromVideoDevice(deviceId, videoRef.current, (result, err) => {
+          if (!mounted) return;
+          if (result) {
+            try {
+              // stop scanning
+              codeReader && codeReader.reset();
+            } catch (e) {}
+            setActive(false);
+            try {
+              onDetected(result.getText());
+            } catch (e) {
+              console.error("onDetected handler error", e);
             }
           }
-        );
-      } catch (err) {
+          if (err && err.name !== "NotFoundException") {
+            // non-critical
+            console.warn(err);
+          }
+        });
+      } catch (e) {
         if (!mounted) return;
-        console.warn("BarcodeScanner start error:", err && err.message ? err.message : err);
-        setError(err && err.message ? err.message : "Camera access denied or unavailable.");
+        console.warn("Scanner error:", e);
+        setError(e.message || "Camera unavailable");
       }
     };
 
-    if (isActive) startScan();
+    if (active) start();
 
     return () => {
       mounted = false;
@@ -73,25 +74,23 @@ const BarcodeScanner = ({ onDetected }) => {
         codeReader && codeReader.reset();
       } catch (e) {}
     };
-  }, [isActive, onDetected]);
+  }, [active, onDetected]);
 
   return (
-    <div className="w-full text-center">
+    <div className="flex flex-col items-center">
       {error ? (
-        <div className="space-y-2">
-          <p className="text-red-500">{error}</p>
-          <p className="text-sm text-gray-600">Switch to the <strong>Manual Input</strong> tab to enter codes manually.</p>
-        </div>
+        <div className="text-sm text-red-500">{error}</div>
       ) : (
-        <video ref={videoRef} className="mx-auto rounded-lg shadow-md w-full max-w-md" />
-      )}
-      {!isActive && (
-        <button
-          onClick={() => setIsActive(true)}
-          className="mt-3 bg-blue-600 text-white px-4 py-2 rounded-lg"
-        >
-          Restart Scan
-        </button>
+        <video
+          ref={videoRef}
+          style={{
+            width: previewWidth,
+            height: previewHeight,
+            objectFit: "cover",
+            borderRadius: 8,
+          }}
+          className="mx-auto"
+        />
       )}
     </div>
   );

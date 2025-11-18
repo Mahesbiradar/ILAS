@@ -1,80 +1,89 @@
 // src/pages/admin/BooksManager.jsx
 import React, { useEffect, useState, useRef } from "react";
 import toast from "react-hot-toast";
-import { BookOpen, Plus, Upload } from "lucide-react";
+import { BookOpen, Plus, Upload, Barcode, Search } from "lucide-react";
+
 import BookManagerTableCompact from "../../components/admin/books/BookManagerTableCompact";
 import AddBook from "../../components/admin/books/AddBook";
 import EditBook from "../../components/admin/books/EditBook";
 import BulkUploadManager from "../../components/admin/books/BulkUploadManager";
 import BarcodeGenerator from "../../components/admin/books/BarcodeGenerator";
+
 import { getBooks, deleteBook, getLibraryMeta } from "../../api/libraryApi";
 
-/**
- * BooksManager Page - Professional Admin Table View
- * Stable, performant admin interface for library book management
- */
+/* ---------------------------------------------------------
+   BooksManager (Admin)
+   Clean, compact, responsive, backend-ready
+---------------------------------------------------------- */
 export default function BooksManager() {
   const [books, setBooks] = useState([]);
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("");
   const [status, setStatus] = useState("");
+
   const [categories, setCategories] = useState([]);
   const [activeTab, setActiveTab] = useState("view");
+
   const [selectedBook, setSelectedBook] = useState(null);
-  const [showEdit, setShowEdit] = useState(false);
-  const [showAdd, setShowAdd] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+
   const [loading, setLoading] = useState(false);
+
   const [page, setPage] = useState(1);
+  const pageSize = 20;
   const [totalCount, setTotalCount] = useState(0);
-  const [pageSize] = useState(20);
+
   const debounceRef = useRef(null);
 
-  // Load categories on mount
-  useEffect(() => {
-    const loadCategories = async () => {
-      try {
-        const meta = await getLibraryMeta();
-        const cats = meta.categories || meta.categories_list || [];
-        setCategories(Array.isArray(cats) ? cats : []);
-      } catch (err) {
-        console.warn("Failed to load categories:", err.message);
-      }
-    };
-    loadCategories();
-  }, []);
+  /* -------------------------------------------
+     Load Categories
+  ------------------------------------------- */
+  // useEffect(() => {
+  // const loadMeta = async () => {
+  //   try {
+  //     const meta = await getLibraryMeta();
+  //     // use backend categories exactly as provided
+  //     setCategories(meta?.categories || []);
+  //   } catch (err) {
+  //     console.warn("Category load error:", err);
+  //   }
+  // };
+  // loadMeta();
+  // }, []);
 
-  // Load books with proper backend response handling
-  const loadBooks = async (pageNum, searchVal, catVal, statusVal) => {
+  /* -------------------------------------------
+     Load Books
+  ------------------------------------------- */
+  const loadBooks = async (pg = 1, s = "", cat = "", st = "") => {
     try {
       setLoading(true);
-      const params = { page: pageNum, page_size: pageSize };
-      if (searchVal && searchVal.trim()) params.search = searchVal.trim();
-      if (catVal && catVal !== "") params.category = catVal;
-      if (statusVal && statusVal !== "") params.status = statusVal;
 
-      const response = await getBooks(params);
-      
-      // Fix: Handle backend's actual response structure
-      let booksData = [];
+      const params = { page: pg, page_size: pageSize };
+
+      if (s.trim() !== "") params.search = s.trim();
+      if (cat) params.category = cat;
+      if (st) params.status = st;
+
+      const res = await getBooks(params);
+
+      let list = [];
       let count = 0;
 
-      if (response.success && response.data) {
-        // Backend returns { success: true, data: [...], count: X, next: ..., previous: ... }
-        booksData = Array.isArray(response.data) ? response.data : [];
-        count = response.count || 0;
-      } else if (response.results) {
-        // Fallback for normalized response
-        booksData = response.results || [];
-        count = response.count || 0;
-      } else if (Array.isArray(response)) {
-        booksData = response;
-        count = response.length;
+      if (res.success && res.data) {
+        list = res.data;
+        count = res.count || list.length;
+      } else if (res.results) {
+        list = res.results;
+        count = res.count || 0;
+      } else if (Array.isArray(res)) {
+        list = res;
+        count = res.length;
       }
 
-      setBooks(booksData);
+      setBooks(list);
       setTotalCount(count);
     } catch (err) {
-      console.error("loadBooks error:", err);
+      console.error(err);
       toast.error("Failed to load books.");
       setBooks([]);
       setTotalCount(0);
@@ -83,119 +92,153 @@ export default function BooksManager() {
     }
   };
 
-  // Initial load - only once
   useEffect(() => {
-    loadBooks(1, "", "", "");
+    loadBooks(1);
   }, []);
 
-  // Debounce filter changes (250ms for search, immediate for dropdowns)
+  /* -------------------------------------------
+     Search / Filter Debounce
+  ------------------------------------------- */
   useEffect(() => {
     clearTimeout(debounceRef.current);
+
     debounceRef.current = setTimeout(() => {
-      setPage(1);
       loadBooks(1, search, category, status);
+      setPage(1);
     }, 250);
+
     return () => clearTimeout(debounceRef.current);
   }, [search, category, status]);
 
+  /* -------------------------------------------
+     Delete
+  ------------------------------------------- */
   const handleDelete = async (book) => {
-    const bookCode = book.book_code || book.code || book.id;
-    if (!window.confirm("Delete this book and all its copies?")) return;
+    if (!book?.id) return toast.error("Invalid book ID");
+
+    const confirmMsg = `⚠️ Delete "${book.title}" permanently?`;
+    if (!window.confirm(confirmMsg)) return;
+
     try {
-      await deleteBook(bookCode);
-      toast.success("Book deleted successfully!");
+      await deleteBook(book.id);
+      toast.success("Book deleted.");
       loadBooks(page, search, category, status);
     } catch (err) {
-      toast.error("Failed to delete book.");
-      console.error(err);
+      toast.error("Delete failed.");
     }
   };
 
-  const handleResetFilters = () => {
+  /* -------------------------------------------
+     Reset
+  ------------------------------------------- */
+  const resetFilters = () => {
     setSearch("");
     setCategory("");
     setStatus("");
     setPage(1);
-    loadBooks(1, "", "", "");
+    loadBooks(1);
   };
 
+  /* -------------------------------------------
+     Tabs
+  ------------------------------------------- */
   const tabs = [
     { id: "view", label: "All Books", icon: BookOpen },
     { id: "add", label: "Add Book", icon: Plus },
     { id: "bulk", label: "Bulk Upload", icon: Upload },
-    { id: "barcode", label: "Barcode Generator", icon: BookOpen },
+    { id: "barcode", label: "Barcode Generator", icon: Barcode },
   ];
 
   const totalPages = Math.ceil(totalCount / pageSize);
 
+  /* -------------------------------------------
+     UI
+  ------------------------------------------- */
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 px-4 py-6">
+    <div className="min-h-screen bg-gray-50 px-4 py-4">
       <div className="max-w-6xl mx-auto">
-        {/* Compact Header */}
-        <div className="mb-4">
-          <div className="flex items-center gap-3">
-            <BookOpen className="w-6 h-6 text-blue-600" />
-            <h1 className="text-lg font-semibold text-gray-900 dark:text-white">Books Manager</h1>
-          </div>
+
+        {/* Header with reduced spacing */}
+        <div className="flex items-center gap-3 mb-2">
+          <BookOpen className="w-6 h-6 text-blue-600" />
+          <h1 className="text-lg font-semibold text-gray-900">Books Manager</h1>
         </div>
 
-        {/* Tab Navigation */}
-        <div className="flex flex-wrap gap-1 mb-4 bg-white dark:bg-gray-800 rounded-lg shadow-sm p-1 overflow-x-auto">
-          {tabs.map((tab) => {
-            const TabIcon = tab.icon;
+        <hr className="border-gray-200 mb-4" />
+
+        {/* Tabs */}
+        <div className="flex flex-wrap gap-1 mb-3 bg-white rounded-md shadow-sm p-1">
+          {tabs.map((t) => {
+            const Icon = t.icon;
             return (
               <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 whitespace-nowrap ${
-                  activeTab === tab.id
-                    ? "bg-blue-600 text-white shadow-md"
-                    : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                key={t.id}
+                onClick={() => setActiveTab(t.id)}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded text-sm transition ${
+                  activeTab === t.id
+                    ? "bg-blue-600 text-white shadow"
+                    : "text-gray-700 hover:bg-gray-100"
                 }`}
               >
-                <TabIcon className="w-4 h-4" />
-                {tab.label}
+                <Icon className="w-4 h-4" />
+                {t.label}
               </button>
             );
           })}
         </div>
 
-        {/* Tab Content */}
+        {/* VIEW TAB */}
         {activeTab === "view" && (
           <div className="space-y-3">
-            {/* Compact Filter Row */}
-            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-2 flex flex-wrap gap-2 items-end">
-              <input
-                type="text"
-                placeholder="Search (title, author, ISBN, code)..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="flex-1 min-w-[200px] px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
-              />
 
-              <select
+            {/* Filters */}
+            <div className="bg-white rounded-lg shadow p-3 flex flex-wrap gap-2 items-end">
+
+              {/* Search with icon */}
+              <div className="flex items-center gap-1 flex-1 min-w-[200px]">
+                <Search className="w-4 h-4 text-gray-500" />
+                <input
+                  type="text"
+                  placeholder="Search title, author, ISBN…"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="w-full border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded px-2 py-1.5 text-sm"
+                />
+              </div>
+
+              {/* Category */}
+              
+              {/* <select
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
-                className="min-w-[140px] px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+                className="min-w-[140px] px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
               >
                 <option value="">All Categories</option>
-                {categories.map((cat) => {
-                  const name = cat.name || cat.title || cat;
-                  const id = cat.slug || cat.id || cat.name || name;
+
+                {categories.map((cat, idx) => {
+                  // support both string categories and object categories from backend
+                  const display =
+                    typeof cat === "string"
+                      ? cat
+                      : cat?.name || cat?.title || cat?.label || String(cat);
+                  // Use the exact display string as the value we send to backend
+                  const valueToSend = display;
                   return (
-                    <option key={id} value={id}>
-                      {name}
+                    <option key={idx} value={valueToSend}>
+                      {display}
                     </option>
                   );
                 })}
-              </select>
+              </select> */}
 
+
+              {/* Status */}
               <select
                 value={status}
                 onChange={(e) => setStatus(e.target.value)}
-                className="min-w-[120px] px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+                className="border border-gray-300 rounded px-2 py-1.5 text-sm focus:ring-blue-500 focus:border-blue-500"
               >
-                <option value="">All Status</option>
+                <option value="">Any Status</option>
                 <option value="AVAILABLE">Available</option>
                 <option value="ISSUED">Issued</option>
                 <option value="LOST">Lost</option>
@@ -203,21 +246,22 @@ export default function BooksManager() {
                 <option value="REMOVED">Removed</option>
               </select>
 
+              {/* Reset */}
               <button
-                onClick={handleResetFilters}
-                className="px-3 py-1.5 text-sm bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded hover:bg-gray-300 dark:hover:bg-gray-600 transition font-medium whitespace-nowrap"
+                onClick={resetFilters}
+                className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 rounded text-sm"
               >
                 Reset
               </button>
             </div>
 
-            {/* Books Table */}
+            {/* Table */}
             <BookManagerTableCompact
               books={books}
               loading={loading}
               onEdit={(book) => {
                 setSelectedBook(book);
-                setShowEdit(true);
+                setShowEditModal(true);
               }}
               onDelete={handleDelete}
               currentPage={page}
@@ -225,60 +269,61 @@ export default function BooksManager() {
               pageSize={pageSize}
               onPreviousPage={() => {
                 if (page > 1) {
-                  const newPage = page - 1;
-                  setPage(newPage);
-                  loadBooks(newPage, search, category, status);
+                  const p = page - 1;
+                  setPage(p);
+                  loadBooks(p, search, category, status);
                 }
               }}
               onNextPage={() => {
                 if (page < totalPages) {
-                  const newPage = page + 1;
-                  setPage(newPage);
-                  loadBooks(newPage, search, category, status);
+                  const p = page + 1;
+                  setPage(p);
+                  loadBooks(p, search, category, status);
                 }
               }}
             />
           </div>
         )}
 
+        {/* ADD TAB */}
         {activeTab === "add" && (
-          <Card variant="elevated" className="p-6">
+          <div className="bg-white rounded-lg shadow p-4">
             <AddBook
               onClose={() => setActiveTab("view")}
               onAdded={() => {
+                loadBooks(1);
                 setActiveTab("view");
-                loadBooks(1, "", "", "");
               }}
             />
-          </Card>
+          </div>
         )}
 
+        {/* BULK TAB */}
         {activeTab === "bulk" && (
-          <Card variant="elevated" className="p-6">
-            <BulkUploadManager 
+          <div className="bg-white rounded-lg shadow p-4">
+            <BulkUploadManager
               onUploaded={() => {
-                loadBooks(1, "", "", "");
+                loadBooks(1);
                 setActiveTab("view");
-              }} 
+              }}
             />
-          </Card>
+          </div>
         )}
 
+        {/* BARCODE TAB */}
         {activeTab === "barcode" && (
-          <Card variant="elevated" className="p-6">
-            <React.Suspense fallback={<div>Loading...</div>}>
-              <BarcodeGenerator />
-            </React.Suspense>
-          </Card>
+          <div className="bg-white rounded-lg shadow p-4">
+            <BarcodeGenerator />
+          </div>
         )}
 
-        {/* Edit Modal */}
-        {showEdit && selectedBook && (
+        {/* EDIT MODAL */}
+        {showEditModal && selectedBook && (
           <EditBook
             book={selectedBook}
-            onClose={() => setShowEdit(false)}
+            onClose={() => setShowEditModal(false)}
             onSubmit={() => {
-              setShowEdit(false);
+              setShowEditModal(false);
               loadBooks(page, search, category, status);
             }}
           />

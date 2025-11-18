@@ -1,7 +1,6 @@
 // src/components/admin/books/AddBook.jsx
 import React, { useState } from "react";
 import toast from "react-hot-toast";
-import axios from "axios";
 import { addBook } from "../../../api/libraryApi";
 import Loader from "../../common/Loader";
 
@@ -18,7 +17,6 @@ export default function AddBook({ onClose, onAdded }) {
     language: "",
     keywords: "",
     description: "",
-    // quantity removed; copies are managed separately
     shelf_location: "",
     condition: "Good",
     availability_status: "Available",
@@ -33,28 +31,45 @@ export default function AddBook({ onClose, onAdded }) {
     is_active: true,
   });
 
-  const [coverPreview, setCoverPreview] = useState(null);
-  const [coverImage, setCoverImage] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [progress, setProgress] = useState(0);
-
   const categories = [
     "Electronics", "Telecommunication", "Embedded Systems", "Programming", "C & C++",
     "Python", "Engineering Mathematics", "Signal Processing", "Networking",
     "Microcontrollers", "IoT", "Project Management", "Machine Learning", "Digital Design",
   ];
 
+  const [coverImage, setCoverImage] = useState(null);
+  const [coverPreview, setCoverPreview] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [progress, setProgress] = useState(0);
+
+  const inputClass =
+    "border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-md px-2 py-1.5 text-sm w-full transition";
+
+  const labelClass = "text-xs font-medium text-gray-600";
+
   const handleChange = (e) => {
-    const { name, value, type, checked } = e.target;
+    const { name, value, checked, type } = e.target;
     setForm({ ...form, [name]: type === "checkbox" ? checked : value });
   };
 
-  const handleFileChange = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      setCoverImage(file);
-      setCoverPreview(URL.createObjectURL(file));
+  const handleCoverChange = (e) => {
+    const f = e.target.files?.[0];
+    if (f) {
+      setCoverImage(f);
+      setCoverPreview(URL.createObjectURL(f));
     }
+  };
+
+  const resetForm = () => {
+    setForm({
+      ...form,
+      title: "",
+      author: "",
+      category: "",
+    });
+    setCoverImage(null);
+    setCoverPreview(null);
+    setProgress(0);
   };
 
   const handleSubmit = async (e) => {
@@ -66,129 +81,171 @@ export default function AddBook({ onClose, onAdded }) {
 
     try {
       setLoading(true);
-      setProgress(0);
 
-      const formData = new FormData();
-      Object.entries(form).forEach(([key, value]) => {
-        if (value !== "" && value !== null) formData.append(key, value);
+      const fd = new FormData();
+      Object.entries(form).forEach(([key, val]) => {
+        if (val !== "" && val != null) fd.append(key, val);
       });
-      if (coverImage) formData.append("cover_image", coverImage);
+      if (coverImage) fd.append("cover_image", coverImage);
 
-      // Use centralized API helper to capture progress and ensure correct endpoint
-      await addBook(formData, (event) => {
-        const percent = Math.round((event.loaded * 100) / event.total);
-        setProgress(percent);
+      await addBook(fd, (ev) => {
+        setProgress(Math.round((ev.loaded / ev.total) * 100));
       });
 
-      toast.success("✅ Book added successfully!");
-      setProgress(100);
-      setTimeout(() => {
-        onAdded?.();
-        onClose?.();
-      }, 800);
-
-      setForm({
-        title: "", subtitle: "", author: "", publisher: "", edition: "", publication_year: "",
-        isbn: "", category: "", language: "", keywords: "", description: "",
-        quantity: 1, shelf_location: "", condition: "Good", availability_status: "Available",
-        book_cost: "", vendor_name: "", source: "", accession_number: "",
-        library_section: "", dewey_decimal: "", cataloger: "", remarks: "", is_active: true,
-      });
-      setCoverImage(null);
-      setCoverPreview(null);
+      toast.success("📚 Book added!");
+      onAdded?.();
+      resetForm();
+      setTimeout(onClose, 300);
     } catch (err) {
-      console.error("AddBook error:", err.response?.data || err.message);
-      toast.error("❌ Failed to add book. Please check required fields.");
+      console.error(err);
+      toast.error("❌ Failed to add book.");
     } finally {
       setLoading(false);
-      setProgress(0);
     }
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex justify-center items-start py-8 z-50 overflow-y-auto">
+    <div className="fixed inset-0 bg-black/40 z-50 flex justify-center items-start py-6 overflow-y-auto">
       {loading && <Loader overlay />}
-      <div className="bg-white w-full max-w-3xl rounded-xl shadow-lg p-5 relative">
+
+      <div className="bg-white w-full max-w-lg rounded-xl shadow-xl p-5 animate-fadeIn">
+        {/* Header */}
         <div className="flex justify-between items-center mb-3">
-          <h2 className="text-xl font-semibold text-blue-700">➕ Add New Book</h2>
-          <button onClick={onClose} className="text-gray-500 hover:text-red-500 text-lg font-bold">
+          <h2 className="text-lg font-semibold text-blue-700">➕ Add New Book</h2>
+          <button onClick={onClose} className="text-gray-600 hover:text-red-600 text-xl font-bold">
             ✕
           </button>
         </div>
 
-        {/* Upload Progress Bar */}
+        {/* Upload Progress */}
         {progress > 0 && (
-          <div className="mb-3">
-            <div className="w-full bg-gray-200 h-2 rounded-full overflow-hidden">
-              <div
-                className="bg-blue-600 h-2 rounded-full transition-all duration-200"
-                style={{ width: `${progress}%` }}
-              ></div>
+          <div className="w-full mb-3">
+            <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+              <div className="h-2 bg-blue-600" style={{ width: `${progress}%` }} />
             </div>
-            <p className="text-xs text-gray-500 mt-1 text-right">{progress}%</p>
+            <p className="text-xs text-gray-600 text-right mt-1">{progress}%</p>
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-3 text-sm">
-          {/* Basic Info */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <input name="title" placeholder="Title *" value={form.title} onChange={handleChange} className="border rounded-md px-2 py-1.5" />
-            <input name="subtitle" placeholder="Subtitle" value={form.subtitle} onChange={handleChange} className="border rounded-md px-2 py-1.5" />
-            <input name="author" placeholder="Author *" value={form.author} onChange={handleChange} className="border rounded-md px-2 py-1.5" />
-            <input name="publisher" placeholder="Publisher" value={form.publisher} onChange={handleChange} className="border rounded-md px-2 py-1.5" />
-            <input name="edition" placeholder="Edition" value={form.edition} onChange={handleChange} className="border rounded-md px-2 py-1.5" />
-            <input name="publication_year" placeholder="Publication Year" value={form.publication_year} onChange={handleChange} className="border rounded-md px-2 py-1.5" />
-            <input name="isbn" placeholder="ISBN" value={form.isbn} onChange={handleChange} className="border rounded-md px-2 py-1.5" />
-            <select name="category" value={form.category} onChange={handleChange} className="border rounded-md px-2 py-1.5">
-              <option value="">Select Category *</option>
-              {categories.map((cat) => (
-                <option key={cat}>{cat}</option>
-              ))}
-            </select>
+        <form onSubmit={handleSubmit} className="space-y-3">
+
+          {/* Title Row */}
+          <div>
+            <label className={labelClass}>Title *</label>
+            <input className={inputClass} name="title" value={form.title} onChange={handleChange} />
           </div>
 
-            {/* Inventory Info - compact 2-column layout */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <input name="language" placeholder="Language" value={form.language} onChange={handleChange} className="border rounded-md px-2 py-1.5" />
-              <input name="keywords" placeholder="Keywords" value={form.keywords} onChange={handleChange} className="border rounded-md px-2 py-1.5" />
-              <input name="shelf_location" placeholder="Shelf Location" value={form.shelf_location} onChange={handleChange} className="border rounded-md px-2 py-1.5" />
-              <input name="condition" placeholder="Condition" value={form.condition} onChange={handleChange} className="border rounded-md px-2 py-1.5" />
+          {/* Double Column Fields */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className={labelClass}>Subtitle</label>
+              <input className={inputClass} name="subtitle" value={form.subtitle} onChange={handleChange} />
             </div>
 
-          {/* Finance & Source */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <input type="number" name="book_cost" placeholder="Book Cost (₹)" value={form.book_cost} onChange={handleChange} className="border rounded-md px-2 py-1.5" />
-            <input name="vendor_name" placeholder="Vendor" value={form.vendor_name} onChange={handleChange} className="border rounded-md px-2 py-1.5" />
-            <input name="source" placeholder="Source (Donation / Purchase)" value={form.source} onChange={handleChange} className="border rounded-md px-2 py-1.5" />
+            <div>
+              <label className={labelClass}>Author *</label>
+              <input className={inputClass} name="author" value={form.author} onChange={handleChange} />
+            </div>
+
+            <div>
+              <label className={labelClass}>Publisher</label>
+              <input className={inputClass} name="publisher" value={form.publisher} onChange={handleChange} />
+            </div>
+
+            <div>
+              <label className={labelClass}>Edition</label>
+              <input className={inputClass} name="edition" value={form.edition} onChange={handleChange} />
+            </div>
+
+            <div>
+              <label className={labelClass}>Publication Year</label>
+              <input className={inputClass} name="publication_year" value={form.publication_year} onChange={handleChange} />
+            </div>
+
+            <div>
+              <label className={labelClass}>ISBN</label>
+              <input className={inputClass} name="isbn" value={form.isbn} onChange={handleChange} />
+            </div>
+
+            <div>
+              <label className={labelClass}>Category *</label>
+              <select className={inputClass} name="category" value={form.category} onChange={handleChange}>
+                <option value="">Choose Category *</option>
+                {categories.map((c) => (
+                  <option key={c}>{c}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className={labelClass}>Language</label>
+              <input className={inputClass} name="language" value={form.language} onChange={handleChange} />
+            </div>
+
+            <div>
+              <label className={labelClass}>Keywords</label>
+              <input className={inputClass} name="keywords" value={form.keywords} onChange={handleChange} />
+            </div>
+
+            <div>
+              <label className={labelClass}>Shelf Location</label>
+              <input className={inputClass} name="shelf_location" value={form.shelf_location} onChange={handleChange} />
+            </div>
+
+            <div>
+              <label className={labelClass}>Condition</label>
+              <input className={inputClass} name="condition" value={form.condition} onChange={handleChange} />
+            </div>
+
+            <div>
+              <label className={labelClass}>Accession No.</label>
+              <input className={inputClass} name="accession_number" value={form.accession_number} onChange={handleChange} />
+            </div>
+
+            <div>
+              <label className={labelClass}>Library Section</label>
+              <input className={inputClass} name="library_section" value={form.library_section} onChange={handleChange} />
+            </div>
+
+            <div>
+              <label className={labelClass}>Dewey Decimal</label>
+              <input className={inputClass} name="dewey_decimal" value={form.dewey_decimal} onChange={handleChange} />
+            </div>
+
+            <div>
+              <label className={labelClass}>Cataloger</label>
+              <input className={inputClass} name="cataloger" value={form.cataloger} onChange={handleChange} />
+            </div>
           </div>
 
-          {/* Cataloging */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <input name="accession_number" placeholder="Accession No." value={form.accession_number} onChange={handleChange} className="border rounded-md px-2 py-1.5" />
-            <input name="library_section" placeholder="Library Section" value={form.library_section} onChange={handleChange} className="border rounded-md px-2 py-1.5" />
-            <input name="dewey_decimal" placeholder="Dewey Decimal" value={form.dewey_decimal} onChange={handleChange} className="border rounded-md px-2 py-1.5" />
-            <input name="cataloger" placeholder="Cataloger" value={form.cataloger} onChange={handleChange} className="border rounded-md px-2 py-1.5" />
+          <div>
+            <label className={labelClass}>Description</label>
+            <textarea className={inputClass} rows={2} name="description" value={form.description} onChange={handleChange} />
           </div>
 
-          <textarea name="description" placeholder="Description / Summary" value={form.description} onChange={handleChange} rows="2" className="w-full border rounded-md px-2 py-1.5"></textarea>
-          <textarea name="remarks" placeholder="Remarks" value={form.remarks} onChange={handleChange} rows="2" className="w-full border rounded-md px-2 py-1.5"></textarea>
+          <div>
+            <label className={labelClass}>Remarks</label>
+            <textarea className={inputClass} rows={2} name="remarks" value={form.remarks} onChange={handleChange} />
+          </div>
 
           {/* Cover Upload */}
-          <div className="flex flex-col sm:flex-row items-center gap-3">
-            <div className="flex-1">
-              <label className="block text-gray-600 text-sm mb-1">Cover Image:</label>
-              <input type="file" accept="image/*" onChange={handleFileChange} className="border rounded-md px-2 py-1.5 w-full" />
+          <div>
+            <label className={labelClass}>Cover Image</label>
+            <div className="flex items-center gap-3 mt-1">
+              <input type="file" accept="image/*" onChange={handleCoverChange} className={inputClass} />
+              {coverPreview && (
+                <img src={coverPreview} className="w-16 h-24 object-cover rounded border" />
+              )}
             </div>
-            {coverPreview && <img src={coverPreview} alt="Preview" className="w-20 h-28 object-cover rounded-md border" />}
           </div>
 
-          {/* Actions */}
-          <div className="flex justify-end gap-3 mt-3">
-            <button type="button" onClick={onClose} className="px-4 py-1.5 bg-gray-300 text-gray-800 rounded-md hover:bg-gray-400">
+          {/* Footer */}
+          <div className="flex justify-end gap-2 pt-2">
+            <button type="button" className="btn-secondary" onClick={onClose}>
               Cancel
             </button>
-            <button type="submit" disabled={loading} className={`px-4 py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 ${loading ? "opacity-70 cursor-not-allowed" : ""}`}>
-              {loading ? "Adding..." : "Add Book"}
+            <button type="submit" className="btn-primary" disabled={loading}>
+              {loading ? "Saving…" : "Save"}
             </button>
           </div>
         </form>

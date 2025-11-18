@@ -12,6 +12,7 @@ Implements:
 
 import io
 import csv
+from unicodedata import category
 from venv import logger
 import zipfile
 import openpyxl
@@ -116,6 +117,45 @@ class BookViewSet(viewsets.ModelViewSet):
         if instance.status == Book.STATUS_ISSUED:
             raise serializers.ValidationError("Cannot delete a book while it is issued.")
         instance.delete()
+
+    def list(self, request, *args, **kwargs):
+        qs = self.queryset
+
+        # --- Search Support ---
+        search = request.query_params.get("search", "").strip()
+        if search:
+            qs = qs.filter(
+                Q(title__icontains=search)
+                | Q(author__icontains=search)
+                | Q(isbn__icontains=search)
+                | Q(book_code__icontains=search)
+            )
+
+        # --- Category Filter ---
+        category = request.query_params.get("category", "").strip()
+        if category:
+            qs = qs.filter(category__icontains=category)
+
+        # --- Status Filter ---
+        status = request.query_params.get("status")
+        if status:
+            qs = qs.filter(status__icontains=status)    
+        # --- Shelf Location Filter ---
+        shelf = request.query_params.get("shelf")
+        if shelf:
+            qs = qs.filter(shelf_location__icontains=shelf)
+
+
+        # Pagination + serializer
+        page = self.paginate_queryset(qs)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+
+        serializer = self.get_serializer(qs, many=True)
+        return Response(serializer.data)
+    
+
 
     # ------------------------
     # Bulk Upload (Excel + ZIP)
@@ -432,7 +472,16 @@ class AdminUserSearchView(APIView):
             paginator.paginate_queryset(User.objects.none(), request, view=self)
             return paginator.get_paginated_response([])
 
-        qs = User.objects.filter(Q(username__icontains=query) | Q(email__icontains=query)).order_by("username")
+        qs = User.objects.filter(
+            Q(username__icontains=query) |
+            Q(email__icontains=query) |
+            Q(unique_id__icontains=query) |
+            Q(first_name__icontains=query) |
+            Q(last_name__icontains=query) |
+            Q(role__icontains=query)
+        ).order_by("username")
+
+
         page = paginator.paginate_queryset(qs, request, view=self)
         data = [{"id": u.id, "username": u.username, "email": u.email} for u in page]
         return paginator.get_paginated_response(data)
@@ -473,6 +522,7 @@ class BookLookupView(APIView):
     def get(self, request, book_code):
         book = get_object_or_404(Book, book_code__iexact=book_code)
         data = {
+            "id": book.id,  # 🔥 required for frontend actions
             "book_code": book.book_code,
             "title": book.title,
             "author": book.author,

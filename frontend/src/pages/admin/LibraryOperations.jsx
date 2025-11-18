@@ -1,305 +1,361 @@
 // src/pages/admin/LibraryOperations.jsx
-import React, { useState, useCallback } from "react";
+import React, { useCallback, useState } from "react";
 import toast from "react-hot-toast";
-import { Zap, RotateCcw, Settings, Loader } from "lucide-react";
+import { Loader } from "lucide-react";
 import { Button, Card, PageTitle, SectionHeader } from "../../components/common";
 import Skeleton from "../../components/ui/Skeleton";
-import BarcodeScanner from "../../components/admin/libraryOps/BarcodeScanner";
+
+import ScannerPanel from "../../components/admin/libraryOps/ScannerPanel";
 import ManualScanInput from "../../components/admin/libraryOps/ManualScanInput";
 import ScanResultCard from "../../components/admin/libraryOps/ScanResultCard";
-import { lookupBookByCode, issueBook, returnBook, updateBookStatus } from "../../services/transactionApi";
+import MemberSearch from "../../components/admin/libraryOps/MemberSearch";
 
-/**
- * LibraryOperations Page
- * Consolidated page for all barcode/issue/return operations:
- * - Tab 1: Issue Book (scan barcode + issue to user)
- * - Tab 2: Return Book (scan barcode + mark returned)
- * - Tab 3: Update Status (change book status)
- */
+import {
+  lookupBookByCode,
+  issueBook,
+  returnBook,
+  updateBookStatus,
+} from "../../services/transactionApi";
+
 export default function LibraryOperations() {
-  const [activeTab, setActiveTab] = useState("issue");
-  const [scanResult, setScanResult] = useState(null);
-  const [useScannerTab, setUseScannerTab] = useState("scanner");
+  const [activeTab, setActiveTab] = useState("issue"); // issue | return | status | info
+  const [scanData, setScanData] = useState(null); // normalized book object (with id)
   const [loading, setLoading] = useState(false);
-  const [memberId, setMemberId] = useState("");
-  const [dueDate, setDueDate] = useState("");
-  const [newStatus, setNewStatus] = useState("AVAILABLE");
+  const [member, setMember] = useState(null); // selected member object {id, name, usn...}
   const [remarks, setRemarks] = useState("");
+  const [statusToSet, setStatusToSet] = useState("LOST");
+  const [lastFine, setLastFine] = useState(null);
 
-  const handleScan = useCallback(async (code) => {
+  // Called when scanner or manual input provides a code
+  const handleLookup = useCallback(async (code) => {
+    if (!code) return;
+    setLoading(true);
+    setScanData(null);
+    setLastFine(null);
     try {
-      setLoading(true);
-      const bookData = await lookupBookByCode(code);
-      
-      // Normalize the API response
-      setScanResult({
-        book_code: bookData.book_code || code,
-        book_title: bookData.title || "Unknown",
-        author: bookData.author || "Unknown",
-        category: bookData.category || "Unknown",
-        shelf_location: bookData.shelf_location || "N/A",
-        status: bookData.status || "Unknown",
-        issued_to: bookData.issued_to || null,
-        due_date: bookData.due_date || null,
-      });
-      toast.success(`Book scanned: ${bookData.title || code}`);
+      const data = await lookupBookByCode(code.trim());
+      // data is normalized by service and includes id & book_code etc.
+      setScanData(data);
+      toast.success(`Found: ${data.title || data.book_code}`);
     } catch (err) {
       console.error("Lookup error:", err);
-      toast.error(err.message || "Book not found");
-      setScanResult(null);
+      toast.error(err?.message || "Book not found");
     } finally {
       setLoading(false);
     }
   }, []);
 
-  const handleIssueBook = async () => {
-    if (!scanResult || !memberId || !dueDate) {
-      toast.error("Please fill in all required fields");
+  // Member chosen from MemberSearch
+  const handleMemberChosen = (m) => {
+    setMember(m || null);
+  };
+
+  // ISSUE flow
+  const handleIssue = async () => {
+    if (!scanData || !scanData.id) {
+      toast.error("Scan a valid book first.");
       return;
     }
-
+    if (!member || !member.id) {
+      toast.error("Select a member (USN / EmpID).");
+      return;
+    }
+    setLoading(true);
     try {
-      setLoading(true);
-      await issueBook(scanResult.book_code, memberId, remarks);
-      toast.success("Book issued successfully!");
-      setScanResult(null);
-      setMemberId("");
-      setDueDate("");
+      const res = await issueBook(scanData.id, member.id, remarks);
+      // res may include updated book/transaction — refresh lookup if possible
+      toast.success("Book issued successfully.");
+      // Refresh book details
+      try {
+        const fresh = await lookupBookByCode(scanData.book_code);
+        setScanData(fresh);
+      } catch (e) {}
       setRemarks("");
     } catch (err) {
       console.error("Issue error:", err);
-      toast.error(err.message || "Failed to issue book");
+      const msg = err?.response?.data?.message || err?.message || "Failed to issue book";
+      toast.error(msg);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleReturnBook = async () => {
-    if (!scanResult) {
-      toast.error("Please scan a book first");
+  // RETURN flow
+  const handleReturn = async () => {
+    if (!scanData || !scanData.id) {
+      toast.error("Scan a valid book first.");
       return;
     }
-
+    // For returns, member selection is optional if backend identifies who returned; but we prefer member id
+    if (!member || !member.id) {
+      // let user confirm (we allow return with unknown member if backend allows)
+      const confirm = window.confirm(
+        "No member selected. Proceed to mark returned without member ID?"
+      );
+      if (!confirm) return;
+    }
+    setLoading(true);
     try {
-      setLoading(true);
-      await returnBook(scanResult.book_code, null, remarks);
-      toast.success("Book marked as returned!");
-      setScanResult(null);
+      const res = await returnBook(scanData.id, member ? member.id : null, remarks);
+      // backend returns fine_amount sometimes
+      if (res && (res.fine_amount || res.fine_amount === 0)) {
+        setLastFine(res.fine_amount);
+        toast.success(`Book returned. Fine: ${res.fine_amount}`);
+      } else {
+        toast.success("Book returned.");
+      }
+      // refresh lookup
+      try {
+        const fresh = await lookupBookByCode(scanData.book_code);
+        setScanData(fresh);
+      } catch (e) {}
       setRemarks("");
     } catch (err) {
       console.error("Return error:", err);
-      toast.error(err.message || "Failed to mark book as returned");
+      const msg = err?.response?.data?.message || err?.message || "Failed to return book";
+      toast.error(msg);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleUpdateStatus = async () => {
-    if (!scanResult || !newStatus) {
-      toast.error("Please select a status");
+  // STATUS update flow
+  const handleStatusUpdate = async () => {
+    if (!scanData || !scanData.id) {
+      toast.error("Scan a valid book first.");
       return;
     }
-
+    setLoading(true);
     try {
-      setLoading(true);
-      await updateBookStatus(scanResult.book_code, newStatus, remarks);
-      toast.success("Book status updated!");
-      setScanResult(null);
-      setNewStatus("AVAILABLE");
+      await updateBookStatus(scanData.id, statusToSet, remarks);
+      toast.success("Book status updated.");
+      // refresh lookup
+      try {
+        const fresh = await lookupBookByCode(scanData.book_code);
+        setScanData(fresh);
+      } catch (e) {}
       setRemarks("");
     } catch (err) {
       console.error("Status update error:", err);
-      toast.error(err.message || "Failed to update book status");
+      const msg = err?.response?.data?.message || err?.message || "Status update failed";
+      toast.error(msg);
     } finally {
       setLoading(false);
     }
   };
 
+  // Clear everything
+  const resetAll = () => {
+    setScanData(null);
+    setMember(null);
+    setRemarks("");
+    setLastFine(null);
+  };
+
+  // Tab definitions
   const tabs = [
-    { id: "issue", label: "📤 Issue Book" },
-    { id: "return", label: "📥 Return Book" },
-    { id: "status", label: "🔄 Update Status" },
+    { id: "issue", label: "Issue Book" },
+    { id: "return", label: "Return Book" },
+    { id: "status", label: "Change Status" },
+    { id: "info", label: "Quick Info" },
   ];
 
   return (
-    <div className="max-w-6xl mx-auto px-6 py-4">
-      <h1 className="text-3xl font-bold mb-6">
-        📚 Library Operations
-      </h1>
+    <div className="min-h-screen p-6">
+      <div className="max-w-5xl mx-auto">
+        <PageTitle>Library Operations</PageTitle>
 
-      {/* Tab Navigation */}
-      <div className="flex flex-wrap gap-2 mb-6 border-b border-gray-200">
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`px-4 py-3 font-medium transition-colors ${
-              activeTab === tab.id
-                ? "text-blue-600 border-b-2 border-blue-600"
-                : "text-gray-600 hover:text-gray-800"
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
-
-      {/* Tab Content */}
-      {(activeTab === "issue" || activeTab === "return" || activeTab === "status") && (
-        <div className="space-y-6">
-          {/* Scanner/Manual Input Toggle */}
-          <div className="flex gap-2 mb-4">
+        {/* Tabs */}
+        <div className="flex gap-2 mb-6">
+          {tabs.map((t) => (
             <button
-              onClick={() => setUseScannerTab("scanner")}
-              className={`px-4 py-2 rounded-lg ${
-                useScannerTab === "scanner"
-                  ? "bg-blue-600 text-white"
-                  : "bg-gray-200 text-gray-800"
+              key={t.id}
+              onClick={() => {
+                setActiveTab(t.id);
+                resetAll();
+              }}
+              className={`px-4 py-2 rounded-md font-medium ${
+                activeTab === t.id ? "bg-blue-600 text-white" : "bg-white text-gray-700 border"
               }`}
             >
-              📷 Camera Scanner
+              {t.label}
             </button>
-            <button
-              onClick={() => setUseScannerTab("manual")}
-              className={`px-4 py-2 rounded-lg ${
-                useScannerTab === "manual"
-                  ? "bg-blue-600 text-white"
-                  : "bg-gray-200 text-gray-800"
-              }`}
-            >
-              ⌨️ Manual Input
-            </button>
+          ))}
+        </div>
+
+        {/* Main area: left scanner + right result/actions (responsive stack on small screens) */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {/* Left column: Scanner / Manual input */}
+          <div className="md:col-span-1">
+            <Card>
+              <SectionHeader title="Scan / Enter Book Code" />
+              <div className="space-y-3">
+                <ScannerPanel onDetected={handleLookup} />
+                <div className="text-sm text-gray-500 mt-2">
+                  You can also paste or type book code in the Manual input once scanner is closed.
+                </div>
+                <ManualScanInput onSubmit={handleLookup} />
+              </div>
+            </Card>
+
+            {/* Member search (only show in tabs that need member selection) */}
+            {(activeTab === "issue" || activeTab === "return") && (
+              <Card className="mt-4">
+                <SectionHeader title="Member (Search by USN / Employee ID)" />
+                <MemberSearch onSelect={handleMemberChosen} />
+                {member && (
+                  <div className="mt-3">
+                    <div className="text-sm text-gray-700">
+                      <strong>{member.full_name || member.name}</strong>
+                    </div>
+                    <div className="text-xs text-gray-500">ID: {member.id} • {member.usn || member.employee_id || ""}</div>
+                  </div>
+                )}
+              </Card>
+            )}
           </div>
 
-          {/* Scanner or Manual Input */}
-          {useScannerTab === "scanner" ? (
-            <BarcodeScanner onDetected={handleScan} />
-          ) : (
-            <ManualScanInput onSubmit={handleScan} />
-          )}
+          {/* Right column: Book result + actions */}
+          <div className="md:col-span-2 space-y-4">
+            {/* Book info card */}
+            <Card>
+              <SectionHeader title="Scanned Book" />
+              {loading && <Skeleton className="h-4 w-48 mb-2" />}
+              {!loading && !scanData && (
+                <div className="text-sm text-gray-600">No book scanned. Start scanner or enter code manually.</div>
+              )}
 
-          {/* Scan Result Card */}
-          {scanResult && (
-            <ScanResultCard
-              data={{
-                copy_id: scanResult.book_code,
-                book_title: scanResult.book_title,
-                author: scanResult.author,
-                category: scanResult.category,
-                shelf_number: scanResult.shelf_location,
-                status: scanResult.status,
-              }}
-              onApprove={handleIssueBook}
-              onReturn={handleReturnBook}
-            />
-          )}
+              {scanData && (
+                <div className="space-y-3">
+                  <ScanResultCard data={scanData} />
+                  {/* Actions area by tab */}
+                  <div className="bg-gray-50 p-4 rounded">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      {/* Member / status / remarks */}
+                      {activeTab === "issue" && (
+                        <>
+                          <div>
+                            <label className="text-xs text-gray-600">Member</label>
+                            <div className="mt-1">
+                              <input
+                                type="text"
+                                readOnly
+                                value={member ? (member.full_name || member.name) : ""}
+                                placeholder="Select member"
+                                className="w-full rounded border px-3 py-2 bg-white"
+                              />
+                            </div>
+                          </div>
+                          <div>
+                            <label className="text-xs text-gray-600">Remarks (optional)</label>
+                            <input
+                              className="w-full rounded border px-3 py-2"
+                              value={remarks}
+                              onChange={(e) => setRemarks(e.target.value)}
+                            />
+                          </div>
+                          <div>
+                            <label className="text-xs text-gray-600">Due date (optional)</label>
+                            <input type="date" className="w-full rounded border px-3 py-2" />
+                          </div>
+                        </>
+                      )}
 
-          {/* Operation Form */}
-          <div className="bg-white p-6 rounded-lg shadow border border-gray-200">
-            <h2 className="text-xl font-semibold mb-4 text-gray-800">
-              {activeTab === "issue" && "📤 Issue Book to Member"}
-              {activeTab === "return" && "📥 Mark Book as Returned"}
-              {activeTab === "status" && "🔄 Update Book Status"}
-            </h2>
+                      {activeTab === "return" && (
+                        <>
+                          <div>
+                            <label className="text-xs text-gray-600">Member (optional)</label>
+                            <input
+                              type="text"
+                              readOnly
+                              value={member ? (member.full_name || member.name) : ""}
+                              placeholder="Select member (optional)"
+                              className="w-full rounded border px-3 py-2 bg-white"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-xs text-gray-600">Last fine</label>
+                            <div className="text-sm text-gray-700 mt-1">
+                              {lastFine !== null ? <span className="text-red-600">₹ {lastFine}</span> : <span>—</span>}
+                            </div>
+                          </div>
+                          <div>
+                            <label className="text-xs text-gray-600">Remarks</label>
+                            <input className="w-full rounded border px-3 py-2" value={remarks} onChange={(e) => setRemarks(e.target.value)} />
+                          </div>
+                        </>
+                      )}
 
-            {loading && (
-              <div className="mb-4">
-                <Skeleton className="w-48 h-4 mb-2" />
-                <Skeleton className="w-full h-6" />
-              </div>
+                      {activeTab === "status" && (
+                        <>
+                          <div>
+                            <label className="text-xs text-gray-600">New Status</label>
+                            <select className="w-full rounded border px-3 py-2" value={statusToSet} onChange={(e) => setStatusToSet(e.target.value)}>
+                              <option value="AVAILABLE">AVAILABLE</option>
+                              <option value="LOST">LOST</option>
+                              <option value="DAMAGED">DAMAGED</option>
+                              <option value="MAINTENANCE">MAINTENANCE</option>
+                              <option value="REMOVED">REMOVED</option>
+                            </select>
+                          </div>
+                          <div className="md:col-span-2">
+                            <label className="text-xs text-gray-600">Remarks</label>
+                            <input className="w-full rounded border px-3 py-2" value={remarks} onChange={(e) => setRemarks(e.target.value)} />
+                          </div>
+                        </>
+                      )}
+                    </div>
+
+                    {/* Action buttons */}
+                    <div className="flex gap-3 mt-4">
+                      {activeTab === "issue" && (
+                        <button onClick={handleIssue} className="bg-green-600 text-white px-4 py-2 rounded disabled:opacity-60" disabled={loading}>
+                          {loading ? <Loader className="animate-spin" /> : "Issue Book"}
+                        </button>
+                      )}
+                      {activeTab === "return" && (
+                        <button onClick={handleReturn} className="bg-blue-600 text-white px-4 py-2 rounded" disabled={loading}>
+                          {loading ? <Loader className="animate-spin" /> : "Mark as Returned"}
+                        </button>
+                      )}
+                      {activeTab === "status" && (
+                        <button onClick={handleStatusUpdate} className="bg-yellow-600 text-white px-4 py-2 rounded" disabled={loading}>
+                          {loading ? <Loader className="animate-spin" /> : "Update Status"}
+                        </button>
+                      )}
+
+                      <button onClick={resetAll} className="bg-gray-100 px-3 py-2 rounded">Clear</button>
+                    </div>
+
+                    {lastFine !== null && (
+                      <div className="mt-3 text-sm text-red-600">Last returned fine: ₹ {lastFine}</div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </Card>
+
+            {/* Quick Info tab additional area */}
+            {activeTab === "info" && (
+              <Card>
+                <SectionHeader title="Quick Info" />
+                {scanData ? (
+                  <div>
+                    <ScanResultCard data={scanData} />
+                    {/* optionally show action shortcuts */}
+                    <div className="mt-3 flex gap-2">
+                      <button onClick={() => { setActiveTab("issue"); }} className="px-3 py-2 bg-blue-600 text-white rounded">Issue</button>
+                      <button onClick={() => { setActiveTab("return"); }} className="px-3 py-2 bg-gray-200 rounded">Return</button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-sm text-gray-600">Scan a book to view its full metadata here.</div>
+                )}
+              </Card>
             )}
-
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Scanned Book *
-                </label>
-                <input
-                  type="text"
-                  value={scanResult ? scanResult.book_title : ""}
-                  disabled
-                  className="w-full border border-gray-300 rounded-lg px-4 py-2 bg-gray-50"
-                  placeholder="Scan a book to prefill"
-                />
-              </div>
-
-              {(activeTab === "issue" || activeTab === "status") && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    {activeTab === "issue" ? "Member ID *" : "New Status *"}
-                  </label>
-                  {activeTab === "issue" ? (
-                    <input
-                      type="text"
-                      value={memberId}
-                      onChange={(e) => setMemberId(e.target.value)}
-                      placeholder="Enter member ID"
-                      className="w-full border border-gray-300 rounded-lg px-4 py-2"
-                    />
-                  ) : (
-                    <select
-                      value={newStatus}
-                      onChange={(e) => setNewStatus(e.target.value)}
-                      className="w-full border border-gray-300 rounded-lg px-4 py-2"
-                    >
-                      <option value="AVAILABLE">Available</option>
-                      <option value="ISSUED">Issued</option>
-                      <option value="DAMAGED">Damaged</option>
-                      <option value="LOST">Lost</option>
-                      <option value="MAINTENANCE">Maintenance</option>
-                      <option value="REMOVED">Removed</option>
-                    </select>
-                  )}
-                </div>
-              )}
-
-              {activeTab === "issue" && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Due Date *
-                  </label>
-                  <input
-                    type="date"
-                    value={dueDate}
-                    onChange={(e) => setDueDate(e.target.value)}
-                    className="w-full border border-gray-300 rounded-lg px-4 py-2"
-                  />
-                </div>
-              )}
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Remarks (Optional)
-                </label>
-                <textarea
-                  value={remarks}
-                  onChange={(e) => setRemarks(e.target.value)}
-                  placeholder="Add any notes..."
-                  className="w-full border border-gray-300 rounded-lg px-4 py-2"
-                  rows="3"
-                />
-              </div>
-
-              <button
-                onClick={
-                  activeTab === "issue"
-                    ? handleIssueBook
-                    : activeTab === "return"
-                    ? handleReturnBook
-                    : handleUpdateStatus
-                }
-                disabled={loading}
-                className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 font-medium flex items-center justify-center gap-2"
-              >
-                {loading && <Loader className="w-4 h-4 animate-spin" />}
-                {activeTab === "issue" && "📤 Issue Book"}
-                {activeTab === "return" && "📥 Mark as Returned"}
-                {activeTab === "status" && "🔄 Update Status"}
-              </button>
-            </div>
           </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }

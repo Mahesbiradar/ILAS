@@ -4,29 +4,24 @@ import React, { useState } from "react";
 const ManualScanInput = ({ onSubmit }) => {
   const [value, setValue] = useState("");
 
-  const handleSubmit = () => {
-    if (value.trim()) {
-      onSubmit(value.trim());
-      setValue("");
-    }
+  const handleSubmit = (e) => {
+    e?.preventDefault?.();
+    const v = value.trim();
+    if (!v) return;
+    onSubmit(v);
+    setValue("");
   };
 
   return (
-    <div className="flex justify-center items-center gap-2 mt-4">
+    <form onSubmit={handleSubmit} className="flex items-center gap-2 mt-3">
       <input
-        type="text"
-        placeholder="Enter barcode manually"
         value={value}
         onChange={(e) => setValue(e.target.value)}
-        className="border rounded-lg px-3 py-2 w-64"
+        placeholder="Enter book code (e.g. ILAS-ET-0001)"
+        className="w-full max-w-md border rounded px-3 py-2"
       />
-      <button
-        onClick={handleSubmit}
-        className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
-      >
-        Submit
-      </button>
-    </div>
+      <button type="submit" className="px-3 py-2 bg-blue-600 text-white rounded">Lookup</button>
+    </form>
   );
 };
 

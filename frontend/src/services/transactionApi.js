@@ -1,85 +1,119 @@
 // src/services/transactionApi.js
 import api from "../api/axios";
 
+// Base admin route
 const ADMIN = "v1/admin";
 
 /**
- * Issue a book to a member
- * POST /api/v1/admin/transactions/issue/
- * Body: { book_id, member_id, remarks? }
+ * ========================================================
+ *  ISSUE BOOK
+ *  POST /api/v1/admin/transactions/issue/
+ * ========================================================
  */
 export const issueBook = async (bookId, memberId, remarks = "") => {
   const res = await api.post(`${ADMIN}/transactions/issue/`, {
     book_id: bookId,
     member_id: memberId,
-    remarks: remarks,
+    remarks,
   });
   return res.data;
 };
 
 /**
- * Return a book from a member
- * POST /api/v1/admin/transactions/return/
- * Body: { book_id, member_id, remarks? }
- * Returns: { detail, book_code, fine_amount }
+ * ========================================================
+ *  RETURN BOOK
+ *  POST /api/v1/admin/transactions/return/
+ * ========================================================
  */
 export const returnBook = async (bookId, memberId, remarks = "") => {
   const res = await api.post(`${ADMIN}/transactions/return/`, {
     book_id: bookId,
     member_id: memberId,
-    remarks: remarks,
+    remarks,
   });
   return res.data;
 };
 
 /**
- * Update book status (Lost, Damaged, Maintenance, Available, Removed)
- * POST /api/v1/admin/transactions/status/
- * Body: { book_id, status, remarks? }
- * status ∈ {LOST, DAMAGED, MAINTENANCE, AVAILABLE, REMOVED}
+ * ========================================================
+ *  UPDATE BOOK STATUS
+ *  POST /api/v1/admin/transactions/status/
+ * ========================================================
  */
 export const updateBookStatus = async (bookId, status, remarks = "") => {
   const res = await api.post(`${ADMIN}/transactions/status/`, {
     book_id: bookId,
-    status: status.toUpperCase(),
-    remarks: remarks,
+    status: String(status).toUpperCase(),
+    remarks,
   });
   return res.data;
 };
 
 /**
- * Get active transactions (currently issued books)
- * GET /api/v1/admin/transactions/active/?page=1&page_size=20&member_id=<id>
+ * ========================================================
+ *  GET ACTIVE TRANSACTIONS
+ *  GET /api/v1/admin/transactions/active/
+ * ========================================================
  */
 export const getActiveTransactions = async (filters = {}) => {
   const params = new URLSearchParams(filters).toString();
   const res = await api.get(`${ADMIN}/transactions/active/?${params}`);
-  const data = res.data;
 
-  // Normalize pagination
-  return Array.isArray(data)
-    ? { results: data, count: data.length, next: null, previous: null }
-    : {
-        results: data.results || [],
-        count: data.count || 0,
-        next: data.next,
-        previous: data.previous,
-      };
+  const data = res.data;
+  return {
+    results: data.results || [],
+    count: data.count || 0,
+    next: data.next,
+    previous: data.previous,
+  };
 };
 
 /**
- * Lookup a book by barcode/code (for barcode scanner)
- * GET /api/v1/library/books/<book_code>/
- * Returns: { book_code, title, author, isbn, status, shelf_location, issued_to, due_date }
+ * ========================================================
+ *  LOOKUP BOOK BY BARCODE / BOOK CODE
+ *  CORRECT ENDPOINT → /api/v1/public/lookup/<book_code>/
+ * ========================================================
+ *
+ * Required response fields after normalization:
+ *  - id
+ *  - book_code
+ *  - title
+ *  - author
+ *  - isbn
+ *  - category
+ *  - shelf_location
+ *  - status
+ *  - issued_to
+ *  - due_date
+ *
  */
 export const lookupBookByCode = async (bookCode) => {
   try {
-    const res = await api.get(`v1/library/books/${bookCode}/`);
-    return res.data;
+    // This is the ONLY correct backend URL
+    const url = `v1/public/lookup/${encodeURIComponent(bookCode)}/`;
+
+    const res = await api.get(url);
+    const data = res.data;
+
+    // Normalize backend response
+    return {
+      id: data.id,
+      book_code: data.book_code,
+      title: data.title,
+      author: data.author,
+      isbn: data.isbn,
+      category: data.category,
+      shelf_location: data.shelf_location,
+      status: data.status,
+      issued_to: data.issued_to,
+      due_date: data.due_date,
+      raw: data,
+    };
   } catch (err) {
-    // Return 404-friendly error
     if (err?.response?.status === 404) {
-      throw new Error("Book not found");
+      const e = new Error("Book not found");
+      e.code = 404;
+      throw e;
     }
     throw err;
   }

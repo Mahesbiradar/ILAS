@@ -9,31 +9,25 @@ export default function DeleteBook({ bookId, bookTitle, onDeleted }) {
 
   const handleDelete = async () => {
     if (!bookId) {
-      toast.error("Book ID missing!");
+      toast.error("❌ Book ID is missing!");
       return;
     }
 
-    const confirmMessage = `
-⚠️ Are you sure you want to delete "${bookTitle || "this book"}"?
-This will permanently remove:
-• The book record
-• All its physical copies (BookCopies)
-• All associated barcodes & cover images
-`;
+    const confirmMessage = `⚠️ Are you sure you want to delete "${bookTitle}"?
+This will permanently remove the book record and its cover image.`;
 
     if (!window.confirm(confirmMessage)) return;
 
     try {
       setLoading(true);
+
       await deleteBook(bookId);
-      toast.success("🗑️ Book and all copies deleted successfully!");
-      onDeleted?.(); // Refresh parent list
+
+      toast.success("🗑️ Book deleted successfully!");
+      onDeleted?.();
     } catch (err) {
-      console.error("DeleteBook error:", err);
-      const msg =
-        err.response?.data?.detail ||
-        "Failed to delete book. Please try again.";
-      toast.error(msg);
+      console.error("Delete error:", err);
+      toast.error(err.response?.data?.detail || "❌ Failed to delete book.");
     } finally {
       setLoading(false);
     }
@@ -49,7 +43,7 @@ This will permanently remove:
           loading ? "opacity-50 cursor-not-allowed" : ""
         }`}
       >
-        {loading ? "Deleting..." : "Delete"}
+        {loading ? "Deleting…" : "Delete"}
       </button>
     </>
   );

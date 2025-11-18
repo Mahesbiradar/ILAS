@@ -1,8 +1,7 @@
 // src/components/admin/books/BulkUploadManager.jsx
 import React, { useState } from "react";
 import toast from "react-hot-toast";
-import axios from "axios";
-import { downloadTemplate, bulkUploadBooks } from "../../../api/libraryApi";
+import { bulkUploadBooks } from "../../../api/libraryApi";
 import { motion, AnimatePresence } from "framer-motion";
 
 export default function BulkUploadManager({ onUploaded }) {
@@ -13,16 +12,14 @@ export default function BulkUploadManager({ onUploaded }) {
   const [progress, setProgress] = useState(0);
   const [uploadSummary, setUploadSummary] = useState(null);
 
-  // Handle file selection
   const handleFileChange = (e, setter) => {
-    const file = e.target.files[0];
+    const file = e.target.files?.[0];
     if (file) setter(file);
   };
 
-  // Handle Upload
   const handleUpload = async () => {
     if (!excelFile) {
-      toast.error("⚠️ Please select an Excel (.xlsx) file first!");
+      toast.error("⚠️ Please select an Excel (.xlsx) file!");
       return;
     }
 
@@ -35,56 +32,40 @@ export default function BulkUploadManager({ onUploaded }) {
       setProgress(0);
       setUploadSummary(null);
 
-      const result = await bulkUploadBooks(formData, (e) => {
-        const percent = Math.round((e.loaded * 100) / e.total);
+      const response = await bulkUploadBooks(formData, (evt) => {
+        const percent = Math.round((evt.loaded / evt.total) * 100);
         setProgress(percent);
       });
 
       setProgress(100);
-      const summary = result || {};
-      toast.success(`✅ ${summary.created || 0} books uploaded successfully!`);
-      setUploadSummary(summary);
 
-      // Reset after short delay
+      toast.success(`🎉 ${response.created || 0} books uploaded!`);
+      setUploadSummary(response);
+      onUploaded?.();
+
       setTimeout(() => {
         setExcelFile(null);
         setZipFile(null);
         setProgress(0);
         setShow(false);
-        onUploaded?.(); // Refresh book list
       }, 1200);
     } catch (err) {
-      console.error("Bulk upload error:", err.response?.data || err.message);
-      toast.error("❌ Bulk upload failed. Check file format or data.");
+      console.error("Bulk upload error:", err);
+      toast.error("❌ Upload failed. Check Excel format.");
     } finally {
       setUploading(false);
     }
   };
 
-  // Template Download
-  const handleTemplateDownload = async () => {
-    try {
-      const res = await downloadTemplate();
-      const blob = new Blob([res.data], {
-        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "ILAS_BookBulkTemplate.xlsx";
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch (err) {
-      console.error("Template download error:", err);
-      toast.error("⚠️ Template download failed.");
-    }
+  const handleTemplateClick = () => {
+    toast("📄 Template download not configured.", { icon: "ℹ️" });
   };
 
   return (
     <div className="relative">
       {/* Toggle Button */}
       <button
-        onClick={() => setShow((p) => !p)}
+        onClick={() => setShow(!show)}
         className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 shadow-md transition"
       >
         📦 Bulk Upload
@@ -93,7 +74,7 @@ export default function BulkUploadManager({ onUploaded }) {
         </span>
       </button>
 
-      {/* Expandable Section */}
+      {/* Dropdown Panel */}
       <AnimatePresence>
         {show && (
           <motion.div
@@ -103,16 +84,14 @@ export default function BulkUploadManager({ onUploaded }) {
             transition={{ duration: 0.25 }}
             className="absolute z-50 mt-2 bg-white border border-gray-300 rounded-xl shadow-xl w-80 p-4"
           >
-            <h3 className="text-gray-700 font-semibold mb-2 text-sm">
+            <h3 className="text-gray-700 font-semibold text-sm mb-2">
               📤 Upload Books in Bulk
             </h3>
 
             <div className="space-y-3 text-xs">
-              {/* Excel Upload */}
+              {/* Excel File */}
               <div>
-                <label className="font-medium text-gray-600">
-                  Excel File (.xlsx)
-                </label>
+                <label className="font-medium text-gray-600">Excel File (.xlsx)</label>
                 <input
                   type="file"
                   accept=".xlsx"
@@ -121,11 +100,9 @@ export default function BulkUploadManager({ onUploaded }) {
                 />
               </div>
 
-              {/* ZIP Upload */}
+              {/* ZIP File */}
               <div>
-                <label className="font-medium text-gray-600">
-                  Cover Images ZIP (optional)
-                </label>
+                <label className="font-medium text-gray-600">Cover Images ZIP (Optional)</label>
                 <input
                   type="file"
                   accept=".zip"
@@ -134,30 +111,32 @@ export default function BulkUploadManager({ onUploaded }) {
                 />
               </div>
 
-              {/* Upload Progress */}
+              {/* Progress Bar */}
               {uploading && (
-                <div className="mt-2">
+                <div>
                   <div className="w-full bg-gray-200 h-2 rounded-full overflow-hidden">
                     <motion.div
                       className="bg-blue-600 h-2 rounded-full"
                       animate={{ width: `${progress}%` }}
-                      transition={{ ease: "easeOut", duration: 0.2 }}
+                      transition={{ ease: "easeOut" }}
                     />
                   </div>
                   <p className="text-gray-500 text-right mt-1">{progress}%</p>
                 </div>
               )}
 
-              {/* Upload Summary */}
+              {/* Summary */}
               {uploadSummary && !uploading && (
-                <div className="bg-green-50 border border-green-200 rounded-md p-2 text-green-700 text-xs mt-2">
-                  <p>
-                    ✅ <strong>{uploadSummary.created}</strong> books created,
-                    <strong> {uploadSummary.skipped || 0}</strong> skipped.
+                <div className="bg-green-50 border border-green-200 p-2 rounded-md">
+                  <p className="text-green-700 text-xs">
+                    ✔ Created: {uploadSummary.created || 0}
                   </p>
-                  {uploadSummary.failed && (
-                    <p className="text-red-600">
-                      ⚠️ {uploadSummary.failed} failed entries.
+                  <p className="text-gray-700 text-xs">
+                    ➖ Skipped: {uploadSummary.skipped || 0}
+                  </p>
+                  {uploadSummary.failed > 0 && (
+                    <p className="text-red-600 text-xs">
+                      ⚠ Failed: {uploadSummary.failed}
                     </p>
                   )}
                 </div>
@@ -174,11 +153,11 @@ export default function BulkUploadManager({ onUploaded }) {
                       : "bg-blue-600 hover:bg-blue-700"
                   }`}
                 >
-                  {uploading ? "Uploading..." : "⬆️ Upload"}
+                  {uploading ? "Uploading..." : "⬆ Upload"}
                 </button>
 
                 <button
-                  onClick={handleTemplateDownload}
+                  onClick={handleTemplateClick}
                   className="px-3 py-1.5 text-xs bg-gray-100 border border-gray-300 rounded-md hover:bg-gray-200"
                 >
                   📄 Template
