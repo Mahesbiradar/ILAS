@@ -547,18 +547,38 @@ class BookLookupView(APIView):
             "id": book.id,
             "book_code": book.book_code,
             "title": book.title,
+            "subtitle": book.subtitle,
             "author": book.author,
-            "isbn": book.isbn,
-            "category": book.category,
             "publisher": book.publisher,
             "edition": book.edition,
             "publication_year": book.publication_year,
+            "isbn": book.isbn,
             "language": book.language,
-            "status": book.status,
+            "category": book.category,
+            "keywords": book.keywords,
+            "description": book.description,
+
+            # 📌 Additional fields you want
+            "accession_no": book.accession_no,
+            "source": book.source,
+            "condition": book.condition,
+            "book_cost": book.book_cost,
+            "vendor_name": book.vendor_name,
             "shelf_location": book.shelf_location,
+            "library_section": book.library_section,
+            "dewey_decimal": book.dewey_decimal,
+            "cataloger": book.cataloger,
+            "remarks": book.remarks,
+
+            # 📌 Cover image
+            "cover_image": request.build_absolute_uri(book.cover_image.url) if book.cover_image else None,
+
+            # Borrow info
+            "status": book.status,
             "issued_to": book.issued_to.username if book.issued_to else None,
             "due_date": None,
         }
+
 
         # If book is issued, include due_date
         if book.status == Book.STATUS_ISSUED:

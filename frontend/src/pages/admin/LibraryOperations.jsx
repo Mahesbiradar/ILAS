@@ -1,9 +1,9 @@
 // src/pages/admin/LibraryOperations.jsx
-import React, { useCallback, useState } from "react";
+import React, { useState, useCallback } from "react";
 import toast from "react-hot-toast";
 import { Loader } from "lucide-react";
+
 import { Card, PageTitle, SectionHeader } from "../../components/common";
-import Skeleton from "../../components/ui/Skeleton";
 
 import ScannerPanel from "../../components/admin/libraryOps/ScannerPanel";
 import ManualScanInput from "../../components/admin/libraryOps/ManualScanInput";
@@ -19,15 +19,14 @@ import {
 } from "../../services/transactionApi";
 
 export default function LibraryOperations() {
-  const [activeTab, setActiveTab] = useState("issue"); // issue | return | status | info
+  const [activeTab, setActiveTab] = useState("issue");
   const [scanData, setScanData] = useState(null);
-  const [loading, setLoading] = useState(false);
   const [member, setMember] = useState(null);
   const [remarks, setRemarks] = useState("");
   const [statusToSet, setStatusToSet] = useState("LOST");
   const [lastFine, setLastFine] = useState(null);
+  const [loading, setLoading] = useState(false);
 
-  // Lookup book by barcode or manual input
   const handleLookup = useCallback(async (code) => {
     if (!code) return;
     setLoading(true);
@@ -37,91 +36,71 @@ export default function LibraryOperations() {
     try {
       const data = await lookupBookByCode(code.trim());
       setScanData(data);
-      toast.success(`Found: ${data.title || data.book_code}`);
-    } catch (err) {
-      toast.error(err?.message || "Book not found");
+      toast.success("Book found");
+    } catch {
+      toast.error("Book not found");
     } finally {
       setLoading(false);
     }
   }, []);
-
-  const handleMemberChosen = (m) => {
-    setMember(m || null);
-  };
-
-  // Issue Book
-  const handleIssue = async () => {
-    if (!scanData?.id) return toast.error("Scan a valid book first.");
-    if (!member?.id) return toast.error("Select a member.");
-
-    setLoading(true);
-    try {
-      await issueBook(scanData.id, member.id, remarks);
-      toast.success("Book issued successfully.");
-      const fresh = await lookupBookByCode(scanData.book_code);
-      setScanData(fresh);
-      setRemarks("");
-    } catch (err) {
-      toast.error(err?.response?.data?.message || err?.message || "Failed to issue book");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Return Book
-  const handleReturn = async () => {
-    if (!scanData?.id) return toast.error("Scan a valid book first.");
-
-    if (!member?.id) {
-      const ok = window.confirm("No member selected. Proceed anyway?");
-      if (!ok) return;
-    }
-
-    setLoading(true);
-    try {
-      const res = await returnBook(scanData.id, member?.id || null, remarks);
-
-      if (res?.fine_amount !== undefined) {
-        setLastFine(res.fine_amount);
-        toast.success(`Book returned. Fine: ₹ ${res.fine_amount}`);
-      } else {
-        toast.success("Book returned.");
-      }
-
-      const fresh = await lookupBookByCode(scanData.book_code);
-      setScanData(fresh);
-      setRemarks("");
-    } catch (err) {
-      toast.error(err?.response?.data?.message || err?.message || "Return failed");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Update Status
-  const handleStatusUpdate = async () => {
-    if (!scanData?.id) return toast.error("Scan a valid book first.");
-
-    setLoading(true);
-    try {
-      await updateBookStatus(scanData.id, statusToSet, remarks);
-      toast.success("Status updated.");
-
-      const fresh = await lookupBookByCode(scanData.book_code);
-      setScanData(fresh);
-      setRemarks("");
-    } catch (err) {
-      toast.error(err?.response?.data?.message || err?.message || "Status update failed");
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const resetAll = () => {
     setScanData(null);
     setMember(null);
     setRemarks("");
     setLastFine(null);
+  };
+
+  const handleMemberChosen = (m) => setMember(m || null);
+
+  const handleIssue = async () => {
+    if (!scanData?.id) return toast.error("Scan a book first");
+    if (!member?.id) return toast.error("Select a member");
+
+    setLoading(true);
+    try {
+      await issueBook(scanData.id, member.id, remarks);
+      toast.success("Book issued successfully");
+      setScanData(await lookupBookByCode(scanData.book_code));
+      setRemarks("");
+    } catch (err) {
+      toast.error(err?.message || "Issue failed");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleReturn = async () => {
+    if (!scanData?.id) return toast.error("Scan a book first");
+
+    setLoading(true);
+    try {
+      const res = await returnBook(scanData.id, member?.id || null, remarks);
+      setLastFine(res?.fine_amount ?? null);
+      toast.success("Returned");
+      setScanData(await lookupBookByCode(scanData.book_code));
+      setRemarks("");
+    } catch (err) {
+      toast.error(err?.message || "Return failed");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleStatusUpdate = async () => {
+    if (!scanData?.id) return toast.error("Scan a book first");
+
+    setLoading(true);
+    try {
+      await updateBookStatus(scanData.id, statusToSet, remarks);
+      toast.success("Status updated");
+      setScanData(await lookupBookByCode(scanData.book_code));
+      setRemarks("");
+    } catch (err) {
+      toast.error(err?.message || "Update failed");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const tabs = [
@@ -132,178 +111,172 @@ export default function LibraryOperations() {
   ];
 
   return (
-    <div className="min-h-screen p-6">
-      <div className="max-w-5xl mx-auto">
-        <PageTitle>Library Operations</PageTitle>
+    <div className="min-h-screen p-3 flex justify-center">
+      {/* 70% scaling container */}
+      <div className="scale-[0.70] origin-top w-full max-w-7xl mx-auto">
 
-        {/* Tabs */}
-        <div className="flex gap-2 mb-6">
+        <PageTitle className="mb-3 text-xl">Library Operations</PageTitle>
+
+        {/* TABS */}
+        <div className="flex gap-3 mb-4">
           {tabs.map((t) => (
             <button
               key={t.id}
-              onClick={() => {
-                setActiveTab(t.id);
-                resetAll();
-              }}
-              className={`px-4 py-2 rounded-md font-medium ${
-                activeTab === t.id
-                  ? "bg-blue-600 text-white"
-                  : "bg-white text-gray-700 border"
-              }`}
+              onClick={() => { setActiveTab(t.id); resetAll(); }}
+              className={`px-5 py-2 text-sm rounded-lg shadow-sm transition 
+                ${activeTab === t.id ? "bg-blue-600 text-white" : "bg-gray-100 hover:bg-gray-200"}
+              `}
             >
               {t.label}
             </button>
           ))}
         </div>
 
-        {/* Main Layout */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {/* LEFT SIDE — Scanner + Member search */}
-          <div className="md:col-span-1">
-            <Card>
-              <SectionHeader title="Scan / Enter Book Code" />
-              <ScannerPanel onDetected={handleLookup} />
-              <ManualScanInput onSubmit={handleLookup} />
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+
+          {/* LEFT 40% */}
+          <div className="md:col-span-5 space-y-4">
+
+            <Card className="p-3 rounded-xl shadow-sm">
+              <SectionHeader title="Scan / Enter Book Code" small />
+              <div className="space-y-3 mt-3">
+                <ScannerPanel onDetected={handleLookup} />
+                <ManualScanInput onSubmit={handleLookup} />
+              </div>
             </Card>
 
             {(activeTab === "issue" || activeTab === "return") && (
-              <Card className="mt-4">
-                <SectionHeader title="Search Member" />
-                <MemberSearch onSelect={handleMemberChosen} />
+              <Card className="p-3 rounded-xl shadow-sm">
+                <SectionHeader title="Search Member" small />
+                <div className="space-y-3 mt-3">
+                  <MemberSearch onSelect={handleMemberChosen} />
 
-                {/* Member preview card */}
-                <MemberInfoCard member={member} />
-              </Card>
-            )}
-          </div>
-
-          {/* RIGHT SIDE — Book Details + Actions */}
-          <div className="md:col-span-2 space-y-4">
-            <Card>
-              <SectionHeader title="Book Details" />
-
-              {loading && <Skeleton className="h-4 w-48 mb-2" />}
-              {!loading && !scanData && (
-                <p className="text-sm text-gray-600">
-                  No book scanned yet. Start scanning or enter book code manually.
-                </p>
-              )}
-
-              {scanData && (
-                <>
-                  <ScanResultCard data={scanData} />
-
-                  {/* Action Zone */}
-                  <div className="bg-gray-50 p-4 rounded mt-3">
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                      {activeTab === "issue" && (
-                        <>
-                          <Field label="Selected Member">
-                            <input
-                              readOnly
-                              value={member?.full_name || ""}
-                              placeholder="Select member"
-                              className="rounded border px-3 py-2 w-full bg-white"
-                            />
-                          </Field>
-
-                          <Field label="Remarks">
-                            <input
-                              className="w-full rounded border px-3 py-2"
-                              value={remarks}
-                              onChange={(e) => setRemarks(e.target.value)}
-                            />
-                          </Field>
-
-                          <Field label="Due Date (optional)">
-                            <input type="date" className="w-full rounded border px-3 py-2" />
-                          </Field>
-                        </>
-                      )}
-
-                      {activeTab === "return" && (
-                        <>
-                          <Field label="Member (optional)">
-                            <input
-                              readOnly
-                              value={member?.full_name || ""}
-                              placeholder="Select member"
-                              className="rounded border px-3 py-2 w-full bg-white"
-                            />
-                          </Field>
-
-                          <Field label="Last Fine">
-                            <p className="text-red-600 font-semibold text-sm">
-                              {lastFine !== null ? `₹ ${lastFine}` : "—"}
-                            </p>
-                          </Field>
-
-                          <Field label="Remarks">
-                            <input
-                              className="w-full rounded border px-3 py-2"
-                              value={remarks}
-                              onChange={(e) => setRemarks(e.target.value)}
-                            />
-                          </Field>
-                        </>
-                      )}
-
-                      {activeTab === "status" && (
-                        <>
-                          <Field label="New Status">
-                            <select
-                              value={statusToSet}
-                              onChange={(e) => setStatusToSet(e.target.value)}
-                              className="w-full rounded border px-3 py-2"
-                            >
-                              <option value="AVAILABLE">AVAILABLE</option>
-                              <option value="LOST">LOST</option>
-                              <option value="DAMAGED">DAMAGED</option>
-                              <option value="MAINTENANCE">MAINTENANCE</option>
-                              <option value="REMOVED">REMOVED</option>
-                            </select>
-                          </Field>
-
-                          <Field label="Remarks" wide>
-                            <input
-                              className="w-full rounded border px-3 py-2"
-                              value={remarks}
-                              onChange={(e) => setRemarks(e.target.value)}
-                            />
-                          </Field>
-                        </>
-                      )}
-                    </div>
-
-                    {/* Buttons */}
-                    <div className="flex gap-3 mt-4">
-                      {activeTab === "issue" && (
-                        <ActionButton onClick={handleIssue} loading={loading} color="green">
-                          Issue Book
-                        </ActionButton>
-                      )}
-                      {activeTab === "return" && (
-                        <ActionButton onClick={handleReturn} loading={loading} color="blue">
-                          Mark as Returned
-                        </ActionButton>
-                      )}
-                      {activeTab === "status" && (
-                        <ActionButton onClick={handleStatusUpdate} loading={loading} color="yellow">
-                          Update Status
-                        </ActionButton>
-                      )}
-
+                  {member && (
+                    <div className="flex items-center gap-2 text-xs">
+                      <span className="px-2 py-1 rounded-lg bg-green-100 text-green-700 shadow-sm">
+                        {member.full_name || member.username} ({member.unique_id})
+                      </span>
                       <button
-                        onClick={resetAll}
-                        className="px-3 py-2 bg-gray-100 rounded"
+                        className="px-2 py-1 bg-gray-200 hover:bg-gray-300 rounded-lg"
+                        onClick={() => setMember(null)}
                       >
                         Clear
                       </button>
                     </div>
-                  </div>
-                </>
-              )}
+                  )}
+
+                  <MemberInfoCard member={member} compact />
+                </div>
+              </Card>
+            )}
+          </div>
+
+          {/* RIGHT 60% */}
+          <div className="md:col-span-7 space-y-4">
+
+            <Card className="p-3 rounded-xl shadow-sm">
+              <SectionHeader title="Book Details" small />
+              <div className="mt-3">
+                {!scanData && (
+                  <p className="text-xs text-gray-500">No book scanned yet.</p>
+                )}
+                {scanData && <ScanResultCard data={scanData} />}
+              </div>
             </Card>
+
+            {scanData && (
+              <Card className="p-3 rounded-xl shadow-sm">
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+
+                  {(activeTab === "issue" || activeTab === "return") && (
+                    <div>
+                      <label className="text-[10px] text-gray-500">Selected Member</label>
+                      <input
+                        readOnly
+                        className="w-full rounded-lg border px-3 py-2 mt-1 bg-gray-50"
+                        value={
+                          member ?
+                          `${member.full_name || member.username} (${member.unique_id})` : ""
+                        }
+                      />
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="text-[10px] text-gray-500">Remarks</label>
+                    <input
+                      className="w-full rounded-lg border px-3 py-2 mt-1"
+                      value={remarks}
+                      onChange={(e) => setRemarks(e.target.value)}
+                      placeholder="Optional"
+                    />
+                  </div>
+
+                  <div>
+                    {activeTab === "issue" && (
+                      <>
+                        <label className="text-[10px] text-gray-500">Due Date</label>
+                        <input type="date" className="w-full rounded-lg border px-3 py-2 mt-1" />
+                      </>
+                    )}
+
+                    {activeTab === "return" && (
+                      <>
+                        <label className="text-[10px] text-gray-500">Last Fine</label>
+                        <div className="text-red-600 font-semibold mt-3">
+                          {lastFine !== null ? `₹ ${lastFine}` : "—"}
+                        </div>
+                      </>
+                    )}
+
+                    {activeTab === "status" && (
+                      <>
+                        <label className="text-[10px] text-gray-500">Change Status</label>
+                        <select
+                          value={statusToSet}
+                          onChange={(e) => setStatusToSet(e.target.value)}
+                          className="w-full rounded-lg border px-3 py-2 mt-1"
+                        >
+                          <option value="AVAILABLE">AVAILABLE</option>
+                          <option value="LOST">LOST</option>
+                          <option value="DAMAGED">DAMAGED</option>
+                          <option value="MAINTENANCE">MAINTENANCE</option>
+                          <option value="REMOVED">REMOVED</option>
+                        </select>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {/* ACTION BUTTONS */}
+                <div className="flex gap-4 mt-5">
+                  {activeTab === "issue" && (
+                    <ActionBtn loading={loading} onClick={handleIssue} color="green">
+                      Issue Book
+                    </ActionBtn>
+                  )}
+                  {activeTab === "return" && (
+                    <ActionBtn loading={loading} onClick={handleReturn} color="blue">
+                      Mark Returned
+                    </ActionBtn>
+                  )}
+                  {activeTab === "status" && (
+                    <ActionBtn loading={loading} onClick={handleStatusUpdate} color="yellow">
+                      Update Status
+                    </ActionBtn>
+                  )}
+
+                  <button
+                    onClick={resetAll}
+                    className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg text-xs"
+                  >
+                    Clear
+                  </button>
+                </div>
+
+              </Card>
+            )}
           </div>
         </div>
       </div>
@@ -311,29 +284,19 @@ export default function LibraryOperations() {
   );
 }
 
-/* Small UI helper */
-function Field({ label, children, wide }) {
-  return (
-    <div className={wide ? "md:col-span-2" : ""}>
-      <label className="text-xs text-gray-600">{label}</label>
-      <div className="mt-1">{children}</div>
-    </div>
-  );
-}
-
-/* Button helper */
-function ActionButton({ children, onClick, loading, color }) {
+function ActionBtn({ children, loading, onClick, color }) {
   const colors = {
-    green: "bg-green-600 hover:bg-green-700",
-    blue: "bg-blue-600 hover:bg-blue-700",
-    yellow: "bg-yellow-600 hover:bg-yellow-700",
+    green: "bg-green-600 hover:bg-green-700 text-white",
+    blue: "bg-blue-600 hover:bg-blue-700 text-white",
+    yellow: "bg-yellow-500 hover:bg-yellow-600 text-white",
   };
 
   return (
     <button
       onClick={onClick}
       disabled={loading}
-      className={`px-4 py-2 text-white rounded ${colors[color]} disabled:opacity-60 flex items-center gap-2`}
+      className={`px-5 py-2 rounded-lg text-sm shadow-sm flex items-center gap-2 ${colors[color]}
+        disabled:opacity-50`}
     >
       {loading && <Loader className="w-4 h-4 animate-spin" />}
       {children}

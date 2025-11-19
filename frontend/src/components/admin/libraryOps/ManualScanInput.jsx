@@ -13,14 +13,15 @@ const ManualScanInput = ({ onSubmit }) => {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-2 mt-4 w-full max-w-md">
+    <form onSubmit={handleSubmit} className="flex flex-col gap-2 mt-2 w-full max-w-sm">
       <input
         value={value}
         onChange={(e) => setValue(e.target.value)}
         placeholder="Enter Book Code (e.g., ILAS-ET-0001)"
-        className="border rounded-lg px-3 py-2 text-sm focus:ring focus:ring-blue-200"
+        className="border rounded px-3 py-2 text-sm"
+        aria-label="Book code"
       />
-      <button className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm">
+      <button className="w-full px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm">
         Lookup
       </button>
     </form>

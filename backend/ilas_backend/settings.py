@@ -30,6 +30,11 @@ DEBUG = True
 ALLOWED_HOSTS = []
 
 
+SECURE_CROSS_ORIGIN_OPENER_POLICY = None
+SECURE_CROSS_ORIGIN_RESOURCE_POLICY = None
+SECURE_REFERRER_POLICY = None
+
+
 # Application definition
 
 INSTALLED_APPS = [
@@ -68,6 +73,9 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
+    'django.middleware.common.CommonMiddleware',
+
 ]
 
 ROOT_URLCONF = 'ilas_backend.urls'
@@ -187,6 +195,11 @@ CORS_ALLOWED_ORIGINS = [
 ]
 
 CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_CREDENTIALS = True
+
+CORS_ALLOW_HEADERS = ["*"]
+CORS_EXPOSE_HEADERS = ["Content-Type"]
+
 
 CORS_EXPOSE_HEADERS = ["Content-Disposition"]  # Enables CSV file download from frontend
 

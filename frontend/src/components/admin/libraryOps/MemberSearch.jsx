@@ -3,12 +3,9 @@ import React, { useState, useEffect } from "react";
 import api from "../../../api/axios";
 
 /**
- * MemberSearch
- * - Fully enhanced UI (no logic change)
- * - Displays: name, username, unique_id, role, phone, borrow_count
- *
+ * MemberSearch: small compact result items for selecting a member.
  * Props:
- * - onSelect(member)
+ *  - onSelect(member)
  */
 
 export default function MemberSearch({ onSelect }) {
@@ -17,18 +14,16 @@ export default function MemberSearch({ onSelect }) {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (!q || q.length < 2) {
+    if (!q || q.trim().length < 2) {
       setResults([]);
       return;
     }
-
     const id = setTimeout(async () => {
       setLoading(true);
       try {
         const res = await api.get("v1/admin/ajax/user-search/", { params: { q } });
-
-        const data = res.data || [];
-        const list = Array.isArray(data) ? data : data.results || [];
+        const data = res.data || {};
+        const list = Array.isArray(data) ? data : data.results || data.data || [];
         setResults(list);
       } catch (err) {
         console.warn("Member search failed", err);
@@ -43,41 +38,36 @@ export default function MemberSearch({ onSelect }) {
 
   return (
     <div className="w-full">
-      {/* Search Input */}
-      <div className="flex items-center gap-2">
+      <div className="mb-2">
         <input
-          placeholder="Search member by Name / USN / Emp ID"
+          placeholder="Search member by name / USN / Emp ID"
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          className="w-full border rounded-lg px-3 py-2 text-sm focus:ring focus:ring-blue-200"
+          className="w-full border rounded px-3 py-2 text-sm"
         />
-        {loading && <div className="text-xs text-gray-500">Searching…</div>}
       </div>
 
-      {/* Results */}
+      {loading && <div className="text-xs text-gray-500 mb-2">Searching…</div>}
+
       {results.length > 0 && (
-        <ul className="mt-2 max-h-56 overflow-y-auto rounded-lg border bg-white shadow-sm divide-y">
+        <ul className="max-h-56 overflow-y-auto rounded border bg-white divide-y">
           {results.map((m) => (
             <li
               key={m.id}
               onClick={() => onSelect(m)}
-              className="p-3 hover:bg-blue-50 cursor-pointer transition flex flex-col gap-1"
+              className="p-3 hover:bg-blue-50 cursor-pointer transition"
             >
-              <div className="font-medium text-sm">{m.full_name || m.username}</div>
-
-              <div className="text-xs text-gray-600 flex flex-wrap gap-3">
-                <span className="font-semibold">ID:</span> {m.id}
-                <span className="font-semibold">Unique ID:</span> {m.unique_id || "—"}
-                <span className="font-semibold">Role:</span> {m.role}
+              <div className="flex items-center justify-between">
+                <div className="font-medium text-sm">{m.full_name || m.username}</div>
+                <div className="text-xs text-gray-500">ID: {m.id}</div>
               </div>
 
-              <div className="text-xs text-gray-600 flex flex-wrap gap-3">
-                <span className="font-semibold">Email:</span> {m.email || "—"}
-                <span className="font-semibold">Phone:</span> {m.phone || "—"}
-              </div>
-
-              <div className="text-xs text-gray-700 flex gap-2">
-                <span className="font-semibold">Borrowed:</span> {m.borrow_count}
+              <div className="text-xs text-gray-600 mt-1 flex flex-wrap gap-3">
+                <div><span className="font-semibold">Unique:</span> {m.unique_id || "—"}</div>
+                <div><span className="font-semibold">Role:</span> {m.role}</div>
+                <div><span className="font-semibold">Email:</span> {m.email || "—"}</div>
+                <div><span className="font-semibold">Phone:</span> {m.phone || "—"}</div>
+                <div><span className="font-semibold">Borrowed:</span> {m.borrow_count ?? 0}</div>
               </div>
             </li>
           ))}
