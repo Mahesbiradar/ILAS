@@ -4,27 +4,29 @@ import api from "../../../api/axios";
 
 /**
  * MemberSearch
- * - Search by USN / employee id / name
- * - Calls: GET /v1/admin/ajax/user-search/?q=<query>
+ * - Fully enhanced UI (no logic change)
+ * - Displays: name, username, unique_id, role, phone, borrow_count
  *
  * Props:
- * - onSelect(member)  // called with selected member object
+ * - onSelect(member)
  */
+
 export default function MemberSearch({ onSelect }) {
   const [q, setQ] = useState("");
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (!q || q.length < 3) {
+    if (!q || q.length < 2) {
       setResults([]);
       return;
     }
+
     const id = setTimeout(async () => {
       setLoading(true);
       try {
         const res = await api.get("v1/admin/ajax/user-search/", { params: { q } });
-        // server may return array or {results:[]}
+
         const data = res.data || [];
         const list = Array.isArray(data) ? data : data.results || [];
         setResults(list);
@@ -40,30 +42,43 @@ export default function MemberSearch({ onSelect }) {
   }, [q]);
 
   return (
-    <div>
+    <div className="w-full">
+      {/* Search Input */}
       <div className="flex items-center gap-2">
         <input
-          placeholder="Search member by USN / Emp ID (min 3 chars)"
+          placeholder="Search member by Name / USN / Emp ID"
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          className="w-full border rounded px-3 py-2"
+          className="w-full border rounded-lg px-3 py-2 text-sm focus:ring focus:ring-blue-200"
         />
-        {loading && <div className="text-sm text-gray-500">Searching…</div>}
+        {loading && <div className="text-xs text-gray-500">Searching…</div>}
       </div>
 
+      {/* Results */}
       {results.length > 0 && (
-        <ul className="mt-2 max-h-48 overflow-auto border rounded bg-white">
+        <ul className="mt-2 max-h-56 overflow-y-auto rounded-lg border bg-white shadow-sm divide-y">
           {results.map((m) => (
             <li
               key={m.id}
               onClick={() => onSelect(m)}
-              className="px-3 py-2 hover:bg-gray-100 cursor-pointer flex justify-between items-center"
+              className="p-3 hover:bg-blue-50 cursor-pointer transition flex flex-col gap-1"
             >
-              <div>
-                <div className="text-sm font-medium">{m.full_name || m.name}</div>
-                <div className="text-xs text-gray-500">{m.usn || m.employee_id || m.email}</div>
+              <div className="font-medium text-sm">{m.full_name || m.username}</div>
+
+              <div className="text-xs text-gray-600 flex flex-wrap gap-3">
+                <span className="font-semibold">ID:</span> {m.id}
+                <span className="font-semibold">Unique ID:</span> {m.unique_id || "—"}
+                <span className="font-semibold">Role:</span> {m.role}
               </div>
-              <div className="text-xs text-gray-600">ID:{m.id}</div>
+
+              <div className="text-xs text-gray-600 flex flex-wrap gap-3">
+                <span className="font-semibold">Email:</span> {m.email || "—"}
+                <span className="font-semibold">Phone:</span> {m.phone || "—"}
+              </div>
+
+              <div className="text-xs text-gray-700 flex gap-2">
+                <span className="font-semibold">Borrowed:</span> {m.borrow_count}
+              </div>
             </li>
           ))}
         </ul>

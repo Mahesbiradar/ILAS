@@ -47,6 +47,8 @@ from .serializers import (
     PublicBookSerializer,
 )
 from .pagination import StandardResultsSetPagination, AdminResultsSetPagination
+from .models import BookTransaction  # add at top if not imported
+
 
 User = get_user_model()
 
@@ -483,7 +485,27 @@ class AdminUserSearchView(APIView):
 
 
         page = paginator.paginate_queryset(qs, request, view=self)
-        data = [{"id": u.id, "username": u.username, "email": u.email} for u in page]
+        from .models import BookTransaction  # add at top if not imported
+
+        data = []
+        for u in page:
+            active_count = BookTransaction.objects.filter(
+                member=u,
+                txn_type=BookTransaction.TYPE_ISSUE,
+                is_active=True
+            ).count()
+
+            data.append({
+                "id": u.id,
+                "username": u.username,
+                "full_name": f"{u.first_name} {u.last_name}".strip(),
+                "unique_id": u.unique_id,
+                "role": u.role,
+                "email": u.email,
+                "phone": u.phone,
+                "borrow_count": active_count,
+            })
+
         return paginator.get_paginated_response(data)
 
 
@@ -522,16 +544,22 @@ class BookLookupView(APIView):
     def get(self, request, book_code):
         book = get_object_or_404(Book, book_code__iexact=book_code)
         data = {
-            "id": book.id,  # 🔥 required for frontend actions
+            "id": book.id,
             "book_code": book.book_code,
             "title": book.title,
             "author": book.author,
             "isbn": book.isbn,
+            "category": book.category,
+            "publisher": book.publisher,
+            "edition": book.edition,
+            "publication_year": book.publication_year,
+            "language": book.language,
             "status": book.status,
             "shelf_location": book.shelf_location,
             "issued_to": book.issued_to.username if book.issued_to else None,
             "due_date": None,
         }
+
         # If book is issued, include due_date
         if book.status == Book.STATUS_ISSUED:
             txn = (
