@@ -46,6 +46,7 @@ from .views import (
     AdminActiveTransactionsView,
     BookLookupView,
     ActiveTransactionsView,
+    AllTransactionsView,
     PublicBookListView,
 )
 from .views_reports import (
@@ -102,6 +103,8 @@ admin_patterns = [
 
     # Active transactions list (used by admin panel)
     path("transactions/active/", ActiveTransactionsView.as_view(), name="active-transactions"),
+    path("transactions/all/", AllTransactionsView.as_view(), name="transactions-all"),
+
 ]
 
 # ----------------------------------------------------------

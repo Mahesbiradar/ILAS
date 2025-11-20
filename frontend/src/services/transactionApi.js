@@ -118,3 +118,35 @@ export const lookupBookByCode = async (bookCode) => {
     throw err;
   }
 };
+
+
+/**
+ * ========================================================
+ *  GET ALL TRANSACTIONS (HISTORY)
+ *  GET /api/v1/admin/transactions/all/
+ * ========================================================
+ */
+export const getAllTransactions = async (filters = {}) => {
+  const params = new URLSearchParams(filters).toString();
+  const res = await api.get(`${ADMIN}/transactions/all/?${params}`);
+
+  return {
+    results: res.data.results || [],
+    count: res.data.count || 0,
+    next: res.data.next,
+    previous: res.data.previous,
+  };
+};
+
+/**
+ * ========================================================
+ *  DOWNLOAD TRANSACTION REPORT CSV
+ *  GET /api/v1/admin/reports/transactions/
+ * ========================================================
+ */
+export const downloadTransactionsReport = async (params = {}) => {
+  return await api.get(`${ADMIN}/reports/transactions/`, {
+    params,
+    responseType: "blob",
+  });
+};

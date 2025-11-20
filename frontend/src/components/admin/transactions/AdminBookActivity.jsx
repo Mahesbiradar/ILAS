@@ -18,10 +18,20 @@ export default function AdminBookActivity() {
   const fetchBookActivity = async () => {
     try {
       setLoading(true);
-      const data = await getBooks();
-      // Sort by added_date descending for recent actions
-      const sorted = [...data].sort(
-        (a, b) => new Date(b.added_date) - new Date(a.added_date)
+      // getBooks returns normalized { results, count, ... }
+      const res = await getBooks({ page_size: 20 });
+      const data = Array.isArray(res) ? res : res.results ?? [];
+      // Use created_at as fallback to added_date
+      const normalized = data.map((b) => ({
+        book_id: b.id ?? b.book_id,
+        title: b.title,
+        author: b.author,
+        category: b.category,
+        added_date: b.created_at ?? b.added_date ?? null,
+        raw: b,
+      }));
+      const sorted = [...normalized].sort(
+        (a, b) => new Date(b.added_date || 0) - new Date(a.added_date || 0)
       );
       setBooks(sorted);
     } catch (err) {
@@ -33,10 +43,8 @@ export default function AdminBookActivity() {
   };
 
   const getActionType = (book) => {
-    // We can detect type of action if future "last_modified" or audit data added
-    // For now, assume recently added = "Added", older entries = "Existing"
     const addedDaysAgo =
-      (Date.now() - new Date(book.added_date)) / (1000 * 60 * 60 * 24);
+      (Date.now() - new Date(book.added_date || Date.now())) / (1000 * 60 * 60 * 24);
     if (addedDaysAgo < 1) return "Added";
     return "Existing";
   };
@@ -58,7 +66,7 @@ export default function AdminBookActivity() {
   const filteredBooks = books.filter(
     (b) =>
       (filter === "all" || getActionType(b).toLowerCase() === filter) &&
-      b.title.toLowerCase().includes(search.toLowerCase())
+      b.title?.toLowerCase().includes(search.toLowerCase())
   );
 
   if (loading) return <Loader />;
@@ -117,7 +125,7 @@ export default function AdminBookActivity() {
               const icon = getActionIcon(action);
               return (
                 <tr
-                  key={book.book_id}
+                  key={book.book_id || index}
                   className="hover:bg-gray-50 transition border-b"
                 >
                   <td className="p-3">{index + 1}</td>
@@ -129,7 +137,7 @@ export default function AdminBookActivity() {
                   <td className="p-3 text-gray-600">{book.author}</td>
                   <td className="p-3 text-gray-600">{book.category}</td>
                   <td className="p-3 text-gray-500">
-                    {new Date(book.added_date).toLocaleDateString()}
+                    {book.added_date ? new Date(book.added_date).toLocaleDateString() : "-"}
                   </td>
                 </tr>
               );

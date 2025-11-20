@@ -1,13 +1,20 @@
 // src/pages/admin/Transactions.jsx
+import React from "react";
 import AdminTransactionList from "../../components/admin/transactions/AdminTransactionList";
 
-export default function AdminTransactionsPage() {
+export default function Transactions() {
   return (
-    <div className="max-w-7xl mx-auto px-4 py-8">
-      <h1 className="text-3xl font-bold text-blue-700 mb-8 text-center">
-        📊 All Transactions
+    <div className="px-4 pt-2 pb-0">
+
+      {/* Compact heading with clean spacing */}
+      <h1 className="text-lg font-semibold text-blue-700 text-center mb-3">
+        Transactions — Active & History
       </h1>
-      <AdminTransactionList />
+
+      {/* Table starts cleanly below heading */}
+      <div className="mt-0">
+        <AdminTransactionList />
+      </div>
     </div>
   );
 }

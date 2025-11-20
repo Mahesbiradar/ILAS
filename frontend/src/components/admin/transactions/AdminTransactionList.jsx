@@ -1,167 +1,392 @@
-// src/components/admin/transactions/AdminTransactionList.jsx
+// --- FINAL COMPACT VERSION (50% UI, ALL LOGIC PRESERVED) ---
 import React, { useEffect, useState, useRef, useCallback } from "react";
 import TransactionCard from "./TransactionCard";
 import Loader from "../../common/Loader";
 import toast from "react-hot-toast";
-import { Download, RefreshCcw } from "lucide-react";
-import { getActiveTransactions } from "../../../services/transactionApi";
+import { Download, RefreshCcw, ChevronDown, ChevronUp } from "lucide-react";
+import {
+  getActiveTransactions,
+  getAllTransactions,
+  downloadTransactionsReport,
+} from "../../../services/transactionApi";
 
 export default function AdminTransactionList() {
+  const [tab, setTab] = useState("active");
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [status, setStatus] = useState("all");
+
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
-  const perPage = 20; // default page size per user preference
+  const perPage = 50;
   const [totalCount, setTotalCount] = useState(0);
+
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+
+  const [expandedRow, setExpandedRow] = useState(null);
+
   const debounceRef = useRef(null);
 
-  const fetchTransactions = useCallback(async (opts = {}) => {
-    const p = opts.page ?? page;
-    const s = opts.status ?? status;
-    const q = opts.search ?? search;
-
+  const formatDate = (d) => {
+    if (!d) return "-";
     try {
-      setLoading(true);
-      const filters = { page: p, page_size: perPage };
-      if (s && s !== "all") filters.status = s;
-      if (q) filters.search = q;
-
-      const data = await getActiveTransactions(filters);
-      setTransactions(data.results || []);
-      setTotalCount(data.count || 0);
-    } catch (err) {
-      console.error("Error loading transactions:", err);
-      toast.error("Failed to load transactions.");
-      setTransactions([]);
-      setTotalCount(0);
-    } finally {
-      setLoading(false);
+      return new Date(d).toLocaleDateString("en-GB");
+    } catch {
+      return String(d).slice(0, 10);
     }
-  }, [page, status, search]);
-
-  // Debounce search and trigger fetch when page/status/search change
-  useEffect(() => {
-    clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => fetchTransactions({ page, status, search }), 300);
-    return () => clearTimeout(debounceRef.current);
-  }, [page, status, search, fetchTransactions]);
-
-  // When total count shrinks and current page is out-of-range, reset page
-  useEffect(() => {
-    setPage((p) => (p > Math.ceil(totalCount / perPage) ? 1 : p));
-  }, [totalCount]);
-
-  // CSV Export
-  const exportCSV = () => {
-    if (!transactions.length) return toast.error("No data to export!");
-    const headers = ["User", "Book", "Status", "Request Date", "Issue Date", "Return Date"];
-    const rows = transactions.map(t => [
-      t.user?.username || "",
-      t.book?.title || "",
-      t.status || "",
-      t.request_date || "",
-      t.issue_date || "-",
-      t.return_date || "-"
-    ]);
-    const csvContent = [headers, ...rows].map(r => r.join(",")).join("\n");
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.download = "admin_transactions.csv";
-    link.click();
   };
 
-  // Pagination (server-driven)
-  const paginated = transactions; // already a page from server
-  const totalPages = Math.max(1, Math.ceil((totalCount || 0) / perPage));
+  const buildFilters = (opts = {}) => {
+    const p = opts.page ?? page;
+    const q = opts.search ?? search;
+    const params = { page: p, page_size: perPage };
+    if (q.trim()) params.search = q.trim();
+    if (opts.startDate ?? startDate) params.start_date = opts.startDate ?? startDate;
+    if (opts.endDate ?? endDate) params.end_date = opts.endDate ?? endDate;
+    return params;
+  };
+
+  const fetchTransactions = useCallback(
+    async (opts = {}) => {
+      try {
+        setLoading(true);
+        const filters = buildFilters(opts);
+        const data =
+          tab === "active"
+            ? await getActiveTransactions(filters)
+            : await getAllTransactions(filters);
+
+        const results = (data.results || []).map((t) => ({
+          id: t.id,
+          txn_type: t.txn_type,
+          book_code: t.book_code,
+          bookTitle: t.book_title,
+          member_name: t.member_name,
+          member_unique_id: t.member_unique_id,
+          issue_date: t.issue_date,
+          due_date: t.due_date,
+          return_date: t.return_date,
+          action_date: t.action_date,
+          actor_name: t.actor_name,
+          days_overdue: t.days_overdue ?? 0,
+          fine_estimate: String(t.fine_amount ?? t.fine_estimate ?? "0.00"),
+          remarks: t.remarks ?? "",
+        }));
+
+        setTransactions(results);
+        setTotalCount(data.count || 0);
+      } catch (err) {
+        console.error("Error loading transactions:", err);
+        toast.error("Failed to load transactions.");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [tab, page, startDate, endDate, search]
+  );
+
+  useEffect(() => {
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      setPage(1);
+      fetchTransactions({ page: 1 });
+    }, 250);
+    return () => clearTimeout(debounceRef.current);
+  }, [search, tab]);
+
+  useEffect(() => {
+    fetchTransactions({ page });
+  }, [page]);
+
+  const formatDateForCsv = (d) => {
+    if (!d) return "";
+    try {
+      return new Date(d).toISOString().slice(0, 10);
+    } catch {
+      return "";
+    }
+  };
+
+  const exportCSV = async () => {
+    try {
+      if (tab === "active") {
+        if (!transactions.length) return toast.error("No data to export!");
+        const headers = [
+          "Transaction ID",
+          "Book Code",
+          "Title",
+          "Member Name",
+          "Member ID",
+          "Issue Date",
+          "Due Date",
+          "Days Overdue",
+          "Fine (Estimated)",
+          "Performed By",
+          "Remarks",
+        ];
+        const rows = transactions.map((t) => [
+          t.id,
+          t.book_code,
+          t.bookTitle,
+          t.member_name,
+          t.member_unique_id || "",
+          formatDateForCsv(t.issue_date),
+          formatDateForCsv(t.due_date),
+          t.days_overdue,
+          t.fine_estimate,
+          t.actor_name || "",
+          `"${(t.remarks || "").replace(/"/g, '""')}"`,
+        ]);
+        const csvContent = [headers, ...rows].map((r) => r.join(",")).join("\n");
+        const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `active_transactions_${new Date().toISOString().slice(0, 10)}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+      } else {
+        const params = {};
+        if (startDate) params.start_date = startDate;
+        if (endDate) params.end_date = endDate;
+        if (search) params.search = search;
+
+        const res = await downloadTransactionsReport(params);
+        const url = window.URL.createObjectURL(res.data);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `transactions_report_${new Date().toISOString().slice(0, 10)}.csv`;
+        a.click();
+        window.URL.revokeObjectURL(url);
+      }
+    } catch (err) {
+      toast.error("CSV export failed.");
+    }
+  };
+
+  const totalPages = Math.ceil(totalCount / perPage) || 1;
+  const toggleExpand = (id) => setExpandedRow((prev) => (prev === id ? null : id));
 
   return (
-    <div className="bg-white shadow-md rounded-lg p-6 border border-gray-100 mb-6">
-      <div className="flex flex-col md:flex-row justify-between items-center mb-4 gap-4">
-        <h2 className="text-lg font-semibold text-blue-700">📊 All Book Transactions</h2>
+    <div className="bg-white shadow-sm rounded-lg p-3 border border-gray-200 mb-4 scale-[0.90] mt-2">
+      {/* Header */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2 mb-2">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => {
+              setTab("active");
+              setPage(1);
+            }}
+            className={`px-2 py-1 rounded text-xs ${
+              tab === "active" ? "bg-blue-600 text-white" : "bg-gray-100"
+            }`}
+          >
+            Active
+          </button>
 
-        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => {
+              setTab("all");
+              setPage(1);
+            }}
+            className={`px-2 py-1 rounded text-xs ${
+              tab === "all" ? "bg-blue-600 text-white" : "bg-gray-100"
+            }`}
+          >
+            History
+          </button>
+
+          <h2 className="text-sm font-semibold text-blue-700 ml-2">
+            {tab === "active" ? "📌 Issued Books" : "🕘 All Transactions"}
+          </h2>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-1">
           <input
             type="text"
-            placeholder="Search book or user..."
-            className="border border-gray-300 rounded-md px-3 py-1.5 text-sm"
+            placeholder={
+              tab === "active"
+                ? "Search book/member…"
+                : "Search member/book/type/ID…"
+            }
+            className="border rounded px-2 py-1 text-xs"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
-          <select
-            value={status}
-            onChange={(e) => setStatus(e.target.value)}
-            className="border border-gray-300 rounded-md px-3 py-1.5 text-sm"
-          >
-            <option value="all">All</option>
-            <option value="pending">Pending</option>
-            <option value="approved">Approved</option>
-            <option value="returned">Returned</option>
-            <option value="rejected">Rejected</option>
-          </select>
+
+          {tab === "all" && (
+            <>
+              <input
+                type="date"
+                className="border rounded px-2 py-1 text-xs"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+              />
+              <input
+                type="date"
+                className="border rounded px-2 py-1 text-xs"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+              />
+            </>
+          )}
 
           <button
-            onClick={() => fetchTransactions({ page, status, search })}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-md flex items-center gap-1"
+            onClick={() => fetchTransactions({ page })}
+            className="bg-blue-600 text-white px-2 py-1 rounded text-xs flex items-center gap-1"
           >
-            <RefreshCcw size={16} /> Refresh
+            <RefreshCcw size={12} /> Refresh
           </button>
 
           <button
             onClick={exportCSV}
-            className="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded-md flex items-center gap-1"
+            className="bg-green-600 text-white px-2 py-1 rounded text-xs flex items-center gap-1"
           >
-            <Download size={16} /> Export CSV
+            <Download size={12} /> CSV
           </button>
         </div>
       </div>
 
+      {/* Body */}
       {loading ? (
         <Loader />
-      ) : paginated.length > 0 ? (
-        <>
-          {paginated.map((t) => (
-            <TransactionCard
-              key={t.id}
-              transaction={{
-                id: t.id,
-                user: t.user?.username || "",
-                bookTitle: t.book?.title || "",
-                action: t.status === "approved"
-                  ? "borrowed"
-                  : t.status === "returned"
-                  ? "returned"
-                  : "requested",
-                date: t.request_date ? new Date(t.request_date).toLocaleDateString() : "",
-              }}
-            />
-          ))}
-
-          {/* Pagination Controls */}
-          <div className="flex justify-center items-center mt-4 gap-2">
-            <button
-              disabled={page === 1}
-              onClick={() => setPage((p) => p - 1)}
-              className="px-3 py-1 border rounded-md hover:bg-gray-100 disabled:opacity-40"
-            >
-              Prev
-            </button>
-            <span className="text-sm text-gray-600">
-              Page {page} of {totalPages}
-            </span>
-            <button
-              disabled={page === totalPages}
-              onClick={() => setPage((p) => p + 1)}
-              className="px-3 py-1 border rounded-md hover:bg-gray-100 disabled:opacity-40"
-            >
-              Next
-            </button>
-          </div>
-        </>
+      ) : transactions.length === 0 ? (
+        <p className="text-center text-xs text-gray-500">No transactions found.</p>
       ) : (
-        <p className="text-gray-500 text-center">No transactions found.</p>
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse text-xs">
+            {tab === "active" ? (
+              <>
+                <thead className="bg-blue-50 text-blue-800 text-[11px]">
+                  <tr>
+                    <th className="p-2 text-left">#</th>
+                    <th className="p-2 text-left">Code</th>
+                    <th className="p-2 text-left">Title</th>
+                    <th className="p-2 text-left">Member</th>
+                    <th className="p-2 text-left">MID</th>
+                    <th className="p-2 text-left">Issue</th>
+                    <th className="p-2 text-left">Due</th>
+                    <th className="p-2 text-left">Over</th>
+                    <th className="p-2 text-left">Fine</th>
+                    <th className="p-2 text-left">By</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {transactions.map((t, i) => (
+                    <tr key={t.id} className="hover:bg-gray-50 border-b">
+                      <td className="p-2">{(page - 1) * perPage + i + 1}</td>
+                      <td className="p-2">{t.book_code}</td>
+                      <td className="p-2">{t.bookTitle}</td>
+                      <td className="p-2">{t.member_name}</td>
+                      <td className="p-2">{t.member_unique_id}</td>
+                      <td className="p-2">{formatDate(t.issue_date)}</td>
+                      <td className="p-2">{formatDate(t.due_date)}</td>
+                      <td className="p-2">{t.days_overdue}</td>
+                      <td className="p-2">{t.fine_estimate}</td>
+                      <td className="p-2">{t.actor_name}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </>
+            ) : (
+              <>
+                <thead className="bg-blue-50 text-blue-800 text-[11px]">
+                  <tr>
+                    <th className="p-2 text-left">ID</th>
+                    <th className="p-2 text-left">Type</th>
+                    <th className="p-2 text-left">Code</th>
+                    <th className="p-2 text-left">Title</th>
+                    <th className="p-2 text-left">Member</th>
+                    <th className="p-2 text-left">MID</th>
+                    <th className="p-2 text-left">Date</th>
+                    <th className="p-2 text-left">By</th>
+                    <th className="p-2 text-left">Fine</th>
+                    <th className="p-2 text-left">Remarks</th>
+                    <th className="p-2 text-left">+</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {transactions.map((t) => (
+                    <React.Fragment key={t.id}>
+                      <tr className="hover:bg-gray-50 border-b">
+                        <td className="p-2">{t.id}</td>
+                        <td className="p-2 font-medium">{t.txn_type}</td>
+                        <td className="p-2">{t.book_code}</td>
+                        <td className="p-2">{t.bookTitle}</td>
+                        <td className="p-2">{t.member_name}</td>
+                        <td className="p-2">{t.member_unique_id}</td>
+                        <td className="p-2">{formatDate(t.action_date)}</td>
+                        <td className="p-2">{t.actor_name}</td>
+                        <td className="p-2">{t.fine_estimate}</td>
+                        <td className="p-2 truncate max-w-[150px]">{t.remarks || "-"}</td>
+                        <td className="p-2">
+                          <button
+                            onClick={() => toggleExpand(t.id)}
+                            className="text-blue-600"
+                          >
+                            {expandedRow === t.id ? (
+                              <ChevronUp size={12} />
+                            ) : (
+                              <ChevronDown size={12} />
+                            )}
+                          </button>
+                        </td>
+                      </tr>
+
+                      {/* Expand */}
+                      {expandedRow === t.id && (
+                        <tr className="bg-gray-50 text-[11px]">
+                          <td colSpan={11} className="p-2">
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                              <div>Issue: {formatDate(t.issue_date)}</div>
+                              <div>Due: {formatDate(t.due_date)}</div>
+                              <div>Return: {formatDate(t.return_date)}</div>
+                              <div>Fine: {t.fine_estimate}</div>
+                              <div className="col-span-4">
+                                Remarks: {t.remarks || "-"}
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  ))}
+                </tbody>
+              </>
+            )}
+          </table>
+        </div>
       )}
+
+      {/* Pagination */}
+      <div className="flex justify-between items-center mt-3 text-[11px]">
+        <div>
+          Showing {(page - 1) * perPage + 1} – {Math.min(page * perPage, totalCount)} /{" "}
+          {totalCount}
+        </div>
+
+        <div className="flex items-center gap-1">
+          <button
+            disabled={page === 1}
+            onClick={() => setPage(page - 1)}
+            className="px-2 py-1 border rounded disabled:opacity-40"
+          >
+            Prev
+          </button>
+
+          <span>
+            {page} / {totalPages}
+          </span>
+
+          <button
+            disabled={page === totalPages}
+            onClick={() => setPage(page + 1)}
+            className="px-2 py-1 border rounded disabled:opacity-40"
+          >
+            Next
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

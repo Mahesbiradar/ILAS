@@ -56,26 +56,42 @@ class BookSerializer(serializers.ModelSerializer):
 
 class BookTransactionSerializer(serializers.ModelSerializer):
     member_name = serializers.ReadOnlyField(source="member.username")
+    member_unique_id = serializers.ReadOnlyField(source="member.unique_id", default=None)
     actor_name = serializers.ReadOnlyField(source="actor.username", default=None)
     book_code = serializers.ReadOnlyField(source="book.book_code")
     book_title = serializers.ReadOnlyField(source="book.title")
-    book_status = serializers.ReadOnlyField(source="book.status")
+    # book_status = serializers.ReadOnlyField(source="book.status")
+    action_date = serializers.SerializerMethodField()
 
     class Meta:
         model = BookTransaction
         fields = [
-            "id", "book", "book_code", "book_title", "book_status",
-            "member", "member_name", "actor", "actor_name",
-            "txn_type", "issue_date", "due_date", "return_date",
-            "fine_amount", "remarks", "is_active",
-            "created_at", "updated_at",
+            "id",
+            "txn_type",
+            "book_code",
+            "book_title",
+            "member_name",
+            "member_unique_id",
+            "actor_name",
+            "issue_date",
+            "due_date",
+            "return_date",
+            "action_date",
+            "fine_amount",
+            "remarks",
+            "is_active",
+            "created_at",
         ]
-        read_only_fields = [
-            "id", "book_code", "book_title", "book_status",
-            "member_name", "actor_name",
-            "issue_date", "due_date", "return_date",
-            "fine_amount", "created_at", "updated_at",
-        ]
+        read_only_fields = fields
+
+    def get_action_date(self, obj):
+        """Standardized date depending on transaction type."""
+        if obj.txn_type == BookTransaction.TYPE_ISSUE:
+            return obj.issue_date.isoformat() if obj.issue_date else None
+        if obj.txn_type == BookTransaction.TYPE_RETURN:
+            return obj.return_date.isoformat() if obj.return_date else None
+        return obj.created_at.isoformat() if obj.created_at else None
+
 
     def validate(self, attrs: Dict[str, Any]):
         txn_type = attrs.get("txn_type")

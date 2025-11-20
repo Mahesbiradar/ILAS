@@ -410,18 +410,97 @@ class MasterReportView(APIView):
 
 
 class TransactionReportView(APIView):
+    """
+    CSV export for ALL transactions (Issue / Return / Lost / Damaged / Maintenance / Removed)
+    Fully aligned with the final All-Transactions table design.
+    """
     permission_classes = [IsAdminUser]
 
     def get(self, request):
-        qs = BookTransaction.objects.select_related("book", "member")
-        headers = ["id", "book_code", "title", "txn_type", "member", "issue_date", "due_date", "return_date", "fine_amount"]
-        rows = (
-            {"id": t.id, "book_code": t.book.book_code, "title": t.book.title, "txn_type": t.txn_type,
-             "member": t.member.username if t.member else "", "issue_date": t.issue_date,
-             "due_date": t.due_date, "return_date": t.return_date, "fine_amount": str(t.fine_amount)}
-            for t in qs
+        from .models import BookTransaction
+        from .views import parse_date_param
+
+        # Base queryset
+        qs = (
+            BookTransaction.objects
+            .select_related("book", "member", "actor")
+            .order_by("-created_at")
         )
-        return csv_response("transaction_report.csv", rows, headers)
+
+        # -------------------------
+        # Apply Filters
+        # -------------------------
+        start = parse_date_param(request.query_params, "start_date")
+        end = parse_date_param(request.query_params, "end_date")
+        member_id = request.query_params.get("member_id")
+        book_code = request.query_params.get("book_code")
+        txn_type = request.query_params.get("txn_type")
+        search = request.query_params.get("search", "").strip()
+
+        if start:
+            qs = qs.filter(created_at__gte=start)
+        if end:
+            qs = qs.filter(created_at__lte=end)
+        if member_id:
+            qs = qs.filter(member__id=member_id)
+        if book_code:
+            qs = qs.filter(book__book_code__iexact=book_code)
+        if txn_type:
+            qs = qs.filter(txn_type__iexact=txn_type)
+        if search:
+            qs = qs.filter(
+                Q(book__title__icontains=search)
+                | Q(book__isbn__icontains=search)
+                | Q(book__book_code__icontains=search)
+                | Q(member__username__icontains=search)
+                | Q(member__unique_id__icontains=search)
+            )
+
+        # -------------------------
+        # CSV Headers (Final Design)
+        # -------------------------
+        headers = [
+            "id",
+            "txn_type",
+            "book_code",
+            "title",
+            "member_name",
+            "member_unique_id",
+            "action_date",
+            "performed_by",
+            "fine_amount",
+            "remarks",
+        ]
+
+        # -------------------------
+        # Row Iterator
+        # -------------------------
+        def row_iter():
+            for t in qs:
+                # Compute action_date according to rules:
+                if t.txn_type == BookTransaction.TYPE_ISSUE:
+                    action_date = t.issue_date.isoformat() if t.issue_date else ""
+                elif t.txn_type == BookTransaction.TYPE_RETURN:
+                    action_date = t.return_date.isoformat() if t.return_date else ""
+                else:
+                    # LOST / DAMAGED / MAINTENANCE / REMOVED → created_at
+                    action_date = t.created_at.isoformat() if t.created_at else ""
+
+                yield {
+                    "id": t.id,
+                    "txn_type": t.txn_type,
+                    "book_code": t.book.book_code if t.book else "",
+                    "title": t.book.title if t.book else "",
+                    "member_name": t.member.username if t.member else "",
+                    "member_unique_id": getattr(t.member, "unique_id", "") if t.member else "",
+                    "action_date": action_date,
+                    "performed_by": t.actor.username if t.actor else "",
+                    "fine_amount": str(t.fine_amount or "0.00"),
+                    "remarks": t.remarks or "",
+                }
+
+        return csv_response("transaction_report.csv", row_iter(), headers)
+
 
 
 class InventoryReportView(APIView):
@@ -533,6 +612,154 @@ class AdminActiveTransactionsView(APIView):
         ]
         return paginator.get_paginated_response(data)
 
+#----------------------------------------------------------
+# All Transactions View (with filters)
+#----------------------------------------------------------
+from rest_framework.permissions import IsAdminUser
+from .serializers import BookTransactionSerializer  # already present above
+
+class AllTransactionsView(APIView):
+    """Paginated listing of all BookTransaction records for admin (history)."""
+    permission_classes = [IsAdminUser]
+    pagination_class = AdminResultsSetPagination
+
+    def get(self, request):
+        # base qs with related joins for performance
+        qs = BookTransaction.objects.select_related("book", "member", "actor").order_by("-created_at")
+
+        # Filters
+        member_id = request.query_params.get("member_id")
+        book_code = request.query_params.get("book_code")
+        txn_type = request.query_params.get("txn_type")
+        search = request.query_params.get("search", "").strip()
+
+        # date range support using parse_date_param available in this file
+        start = parse_date_param(request.query_params, "start_date")
+        end = parse_date_param(request.query_params, "end_date")
+
+        if member_id:
+            qs = qs.filter(member__id=member_id)
+        if book_code:
+            qs = qs.filter(book__book_code__iexact=book_code)
+        if txn_type:
+            qs = qs.filter(txn_type__iexact=txn_type)
+        if start:
+            qs = qs.filter(created_at__gte=start)
+        if end:
+            qs = qs.filter(created_at__lte=end)
+        if search:
+            qs = qs.filter(
+                Q(book__title__icontains=search)
+                | Q(book__isbn__icontains=search)
+                | Q(book__book_code__icontains=search)
+                | Q(member__username__icontains=search)
+                | Q(member__unique_id__icontains=search)
+                | Q(txn_type__icontains=search)   # 🔥 NEW
+            )
+
+        paginator = self.pagination_class()
+        page = paginator.paginate_queryset(qs, request, view=self)
+        serializer = BookTransactionSerializer(page, many=True)
+        return paginator.get_paginated_response(serializer.data)
+
+
+# --- Patch TransactionReportView to apply filters ---
+class TransactionReportView(APIView):
+    """
+    CSV export for ALL transactions (Issue / Return / Lost / Damaged / Maintenance / Removed)
+    Fully aligned with the final All-Transactions table format.
+    """
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        qs = (
+            BookTransaction.objects
+            .select_related("book", "member", "actor")
+            .order_by("-created_at")
+        )
+
+        # -------------------------
+        # Apply Filters
+        # -------------------------
+        start = parse_date_param(request.query_params, "start_date")
+        end = parse_date_param(request.query_params, "end_date")
+        member_id = request.query_params.get("member_id")
+        book_code = request.query_params.get("book_code")
+        txn_type = request.query_params.get("txn_type")
+        search = request.query_params.get("search", "").strip()
+
+        if start:
+            qs = qs.filter(created_at__gte=start)
+        if end:
+            qs = qs.filter(created_at__lte=end)
+        if member_id:
+            qs = qs.filter(member__id=member_id)
+        if book_code:
+            qs = qs.filter(book__book_code__iexact=book_code)
+        if txn_type:
+            qs = qs.filter(txn_type__iexact=txn_type)
+        if search:
+            qs = qs.filter(
+                Q(book__title__icontains=search)
+                | Q(book__isbn__icontains=search)
+                | Q(book__book_code__icontains=search)
+                | Q(member__username__icontains=search)
+                | Q(member__unique_id__icontains=search)
+                | Q(txn_type__icontains=search)     # 🔥 Added transaction-type search
+            )
+
+        # -------------------------
+        # Final CSV Headers
+        # -------------------------
+        headers = [
+            "id",
+            "txn_type",
+            "book_code",
+            "title",
+            "member_name",
+            "member_unique_id",
+            "action_date",
+            "performed_by",
+            "fine_amount",
+            "remarks",
+        ]
+
+        # -------------------------
+        # Row Builder
+        # -------------------------
+        def normalize_date(d):
+            """Return only YYYY-MM-DD."""
+            try:
+                return d.date().isoformat()
+            except:
+                return ""
+
+        def row_iter():
+            for t in qs:
+
+                # Determine canonical action date
+                if t.txn_type == BookTransaction.TYPE_ISSUE:
+                    action_date = normalize_date(t.issue_date)
+                elif t.txn_type == BookTransaction.TYPE_RETURN:
+                    action_date = normalize_date(t.return_date)
+                else:
+                    # DAMAGED / LOST / MAINTENANCE / REMOVED
+                    action_date = normalize_date(t.created_at)
+
+                yield {
+                    "id": t.id,
+                    "txn_type": t.txn_type,
+                    "book_code": t.book.book_code if t.book else "",
+                    "title": t.book.title if t.book else "",
+                    "member_name": t.member.username if t.member else "",
+                    "member_unique_id": getattr(t.member, "unique_id", "") if t.member else "",
+                    "action_date": action_date,
+                    "performed_by": t.actor.username if t.actor else "",
+                    "fine_amount": str(t.fine_amount or "0.00"),
+                    "remarks": t.remarks or "",
+                }
+
+        return csv_response("transaction_report.csv", row_iter(), headers)
 
 # ----------------------------------------------------------
 # BOOK LOOKUP API (Barcode / Search Integration)
@@ -618,10 +845,12 @@ class ActiveTransactionsView(APIView):
                 "title": t.book.title,
                 "member_name": t.member.username if t.member else None,
                 "member_id": t.member.id if t.member else None,
+                "member_unique_id": getattr(t.member, "unique_id", None),
                 "issue_date": t.issue_date,
                 "due_date": t.due_date,
                 "days_overdue": overdue,
                 "fine_estimate": str(t.fine_amount),
+                "actor_name": t.actor.username if t.actor else None,
             })
         return paginator.get_paginated_response(data)
 
