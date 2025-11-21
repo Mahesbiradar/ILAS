@@ -22,8 +22,8 @@ export default function BookFilter({ search, setSearch, category, setCategory, c
       >
         <option value="">All Categories</option>
         {categories.map((c) => (
-          <option key={c.id || c.name} value={c.slug || c.name}>
-            {c.name}
+          <option key={c} value={c}>
+            {c}
           </option>
         ))}
       </select>

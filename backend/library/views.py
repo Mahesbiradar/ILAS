@@ -268,10 +268,11 @@ class IssueBookAPIView(APIView):
     permission_classes = [IsAdminUser]
 
     def post(self, request):
+        # Accept frontend payload book_id + member_id
         serializer = BookTransactionSerializer(
             data={
-                "book": request.data.get("book_id"),
-                "member": request.data.get("member_id"),
+                "book_id": request.data.get("book_id"),
+                "member_id": request.data.get("member_id"),
                 "txn_type": BookTransaction.TYPE_ISSUE,
                 "remarks": request.data.get("remarks", ""),
             },
@@ -869,5 +870,15 @@ class PublicBookListView(APIView):
             qs = qs.filter(Q(title__icontains=search) | Q(author__icontains=search))
         paginator = self.pagination_class()
         page = paginator.paginate_queryset(qs, request, view=self)
+        category = request.query_params.get("category")
+        if category:
+            qs = qs.filter(category__icontains=category)
         serializer = PublicBookSerializer(page, many=True)
         return paginator.get_paginated_response(serializer.data)
+
+class LibraryMetaAPIView(APIView):
+    permission_classes = [AllowAny]
+    def get(self, request):
+        categories = Book.objects.values_list("category", flat=True).distinct()
+        return Response({"categories": sorted(list(set(categories)))})
+

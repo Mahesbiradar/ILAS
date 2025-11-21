@@ -28,26 +28,47 @@ export default function CategoryGrid({ onSelect }) {
     navigate(`/books?category=${encodeURIComponent(slug)}`);
   };
 
-  if (!categories.length) return <p className="text-sm text-gray-500">No categories found.</p>;
+  if (!categories.length)
+    return <p className="text-sm text-gray-500">No categories found.</p>;
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-6">
       {categories.map((c) => {
         const id = c.slug || c.id || c.name;
         const name = c.name || c.title || c;
-        const subtitle = c.description || c.subtitle || "";
+
         return (
           <button
             key={id}
             onClick={() => handleClick(id)}
-            className="flex flex-col items-start p-3 rounded-lg shadow-sm hover:shadow-md transition bg-white border border-gray-100"
+            className="
+              group
+              flex flex-col items-center justify-center 
+              h-32 sm:h-36
+              rounded-xl 
+              bg-white/90 backdrop-blur 
+              shadow-sm 
+              border border-gray-100 
+              hover:shadow-lg 
+              hover:-translate-y-1 
+              transition-all duration-300
+            "
           >
-            <div className="p-2 rounded-md bg-blue-50">
-              <BookOpen size={18} className="text-blue-600" />
+            {/* Icon */}
+            <div className="
+              p-3 rounded-xl 
+              bg-blue-50 
+              group-hover:bg-blue-100 
+              transition
+            ">
+              <BookOpen size={22} className="text-blue-600" />
             </div>
-            <div className="mt-3 text-left">
-              <div className="font-semibold text-sm text-gray-800">{name}</div>
-              {subtitle && <div className="text-xs text-gray-500">{subtitle}</div>}
+
+            {/* Category Title */}
+            <div className="mt-3 text-center">
+              <div className="font-semibold text-sm text-gray-800">
+                {name}
+              </div>
             </div>
           </button>
         );

@@ -48,11 +48,10 @@ export async function getPublicBooks(filters = {}) {
 }
 
 export async function getLibraryMeta() {
-  // categories, statuses, languages
-  const res = await api.get(`${LIBRARY}/meta/`);
-  // Expect { success:true, data: { statuses:[], categories:[], languages:[] } } or plain data
-  return res.data.data ?? res.data;
+  const res = await api.get(`${PUBLIC}/meta/`);
+  return res.data.categories || res.data;
 }
+
 
 export async function lookupBookByCode(bookCode) {
   // Public barcode lookup: /api/v1/public/lookup/<book_code>/
@@ -184,3 +183,5 @@ export async function getTaskStatus(taskId) {
   const res = await api.get(`tasks/status/${encodeURIComponent(taskId)}/`);
   return res.data;
 }
+
+

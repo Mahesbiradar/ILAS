@@ -36,6 +36,7 @@ from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView, Sp
 from .views import (
     BookViewSet,
     IssueBookAPIView,
+    LibraryMetaAPIView,
     ReturnBookAPIView,
     UpdateBookStatusAPIView,
     MasterReportView,
@@ -74,6 +75,8 @@ router.register(r"books", BookViewSet, basename="books")
 public_patterns = [
     path("books/", PublicBookListView.as_view(), name="public-book-list"),
     path("lookup/<str:book_code>/", BookLookupView.as_view(), name="book-lookup"),
+    path("meta/", LibraryMetaAPIView.as_view(), name="library-meta")
+
 ]
 
 # ----------------------------------------------------------

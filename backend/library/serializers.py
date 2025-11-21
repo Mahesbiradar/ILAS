@@ -6,11 +6,16 @@ from django.utils import timezone
 from rest_framework import serializers
 
 from .models import Book, BookTransaction, AuditLog
+from django.contrib.auth import get_user_model
+from rest_framework.exceptions import ValidationError as DRFValidationError
+User = get_user_model()
 
 
 class BookSerializer(serializers.ModelSerializer):
     issued_to_name = serializers.ReadOnlyField(source="issued_to.username", default=None)
     last_modified_by_name = serializers.ReadOnlyField(source="last_modified_by.username", default=None)
+    cover_image = serializers.SerializerMethodField()
+
 
     class Meta:
         model = Book
@@ -30,6 +35,14 @@ class BookSerializer(serializers.ModelSerializer):
             "issued_to_name", "last_modified_by_name",
             "created_at", "updated_at",
         ]
+    
+    def get_cover_image(self, obj):
+        request = self.context.get("request")
+        if obj.cover_image:
+            if request:
+                return request.build_absolute_uri(obj.cover_image.url)
+            return obj.cover_image.url
+        return None
 
     def validate(self, attrs):
         # Ensure API create has defaults for required fields
@@ -54,14 +67,24 @@ class BookSerializer(serializers.ModelSerializer):
         return super().update(instance, validated_data)
 
 
+# library/serializers.py
+# ... (keep top-of-file imports as-is)
+from django.contrib.auth import get_user_model
+from rest_framework.exceptions import ValidationError as DRFValidationError
+
+User = get_user_model()
+
 class BookTransactionSerializer(serializers.ModelSerializer):
     member_name = serializers.ReadOnlyField(source="member.username")
     member_unique_id = serializers.ReadOnlyField(source="member.unique_id", default=None)
     actor_name = serializers.ReadOnlyField(source="actor.username", default=None)
     book_code = serializers.ReadOnlyField(source="book.book_code")
     book_title = serializers.ReadOnlyField(source="book.title")
-    # book_status = serializers.ReadOnlyField(source="book.status")
     action_date = serializers.SerializerMethodField()
+
+    # Accept frontend payload: book_id and member_id (write-only)
+    book_id = serializers.IntegerField(write_only=True, required=False)
+    member_id = serializers.IntegerField(write_only=True, required=False)
 
     class Meta:
         model = BookTransaction
@@ -81,58 +104,103 @@ class BookTransactionSerializer(serializers.ModelSerializer):
             "remarks",
             "is_active",
             "created_at",
+
+            # Write-only inputs (frontend)
+            "book_id",
+            "member_id",
         ]
-        read_only_fields = fields
+        # Keep display fields readonly; write-only fields are omitted from read-only list
+        read_only_fields = [
+            "id",
+            "book_code",
+            "book_title",
+            "member_name",
+            "member_unique_id",
+            "actor_name",
+            "issue_date",
+            "due_date",
+            "return_date",
+            "action_date",
+            "fine_amount",
+            "is_active",
+            "created_at",
+        ]
 
     def get_action_date(self, obj):
-        """Standardized date depending on transaction type."""
+        """Return ISO formatted datetime for API table display (page uses it)."""
         if obj.txn_type == BookTransaction.TYPE_ISSUE:
             return obj.issue_date.isoformat() if obj.issue_date else None
         if obj.txn_type == BookTransaction.TYPE_RETURN:
             return obj.return_date.isoformat() if obj.return_date else None
         return obj.created_at.isoformat() if obj.created_at else None
 
+    def _resolve_book_and_member(self, attrs):
+        """Helper to get actual Book and User instances from either supplied objects or ids."""
+        # Book resolution (book may be provided by callers, but our API posts book_id)
+        book = attrs.get("book")
+        if not book:
+            book_id = attrs.pop("book_id", None) or self.initial_data.get("book_id")
+            if book_id:
+                try:
+                    book = Book.objects.get(pk=book_id)
+                except Book.DoesNotExist:
+                    raise DRFValidationError({"book_id": "Invalid book_id."})
+                attrs["book"] = book
 
-    def validate(self, attrs: Dict[str, Any]):
+        # Member resolution
+        member = attrs.get("member")
+        if not member:
+            member_id = attrs.pop("member_id", None) or self.initial_data.get("member_id")
+            if member_id:
+                try:
+                    member = User.objects.get(pk=member_id)
+                except User.DoesNotExist:
+                    raise DRFValidationError({"member_id": "Invalid member_id."})
+                attrs["member"] = member
+
+        return attrs
+
+    def validate(self, attrs):
+        # Ensure we resolve ids -> instances before performing validation logic.
+        attrs = self._resolve_book_and_member(dict(attrs))  # copy to avoid mutating original too early
+
         txn_type = attrs.get("txn_type")
         book = attrs.get("book")
         member = attrs.get("member")
 
         if not book:
-            raise serializers.ValidationError({"book": "Book is required."})
-        if not member:
-            raise serializers.ValidationError({"member": "Member is required."})
+            raise DRFValidationError({"book": "Book is required."})
+        if not member and txn_type == BookTransaction.TYPE_ISSUE:
+            # ISSUE needs a member
+            raise DRFValidationError({"member": "Member is required for ISSUE."})
 
-        # ISSUE validation (R1.01-R1.04)
+        # ISSUE validation (reuse business rules)
         if txn_type == BookTransaction.TYPE_ISSUE:
             if not book.can_be_issued():
-                raise serializers.ValidationError({"book": "Book is not available for issue."})
+                raise DRFValidationError({"book": "Book is not available for issue."})
             if not getattr(member, "is_active", True):
-                raise serializers.ValidationError({"member": "Member is not active."})
+                raise DRFValidationError({"member": "Member is not active."})
             if BookTransaction.objects.filter(book=book, txn_type=BookTransaction.TYPE_ISSUE, is_active=True).exists():
-                raise serializers.ValidationError({"book": "Book already has an active issue."})
+                raise DRFValidationError({"book": "Book already has an active issue."})
 
-        # RETURN validation (R2.01-R2.05)
+        # RETURN validation
         if txn_type == BookTransaction.TYPE_RETURN:
             active_issue = BookTransaction.objects.filter(book=book, txn_type=BookTransaction.TYPE_ISSUE, is_active=True).first()
             if not active_issue:
-                raise serializers.ValidationError({"txn_type": "No active ISSUE for this book."})
+                raise DRFValidationError({"txn_type": "No active ISSUE for this book."})
+            # if a member is supplied ensure it matches the active issue owner
             if member and active_issue.member and (active_issue.member.pk != member.pk):
-                raise serializers.ValidationError({"member": "Return must be by same member who issued the book."})
+                raise DRFValidationError({"member": "Return must be by same member who issued the book."})
             ret_date = attrs.get("return_date")
             if ret_date and ret_date > timezone.now():
-                raise serializers.ValidationError({"return_date": "Return date cannot be in the future."})
+                raise DRFValidationError({"return_date": "Return date cannot be in the future."})
 
         return attrs
-    
-    def update(self, instance, validated_data):
-        # Prevent editing immutable fields like fine_amount
-        if "fine_amount" in validated_data and validated_data["fine_amount"] != instance.fine_amount:
-            raise serializers.ValidationError({"fine_amount": "Fine records are immutable once set."})
-        return super().update(instance, validated_data)
-
 
     def create(self, validated_data):
+        # Ensure book/member instances are present
+        validated_data = self._resolve_book_and_member(dict(validated_data))
+
         txn_type = validated_data.get("txn_type")
         book = validated_data.get("book")
         member = validated_data.get("member")
@@ -140,12 +208,11 @@ class BookTransactionSerializer(serializers.ModelSerializer):
         actor = getattr(request, "user", None)
         remarks = validated_data.get("remarks", "")
 
+        # Use model methods to preserve atomic behaviour / fines / audit creation
         if txn_type == BookTransaction.TYPE_ISSUE:
-            # Use the model method for atomic issue
             return book.mark_issued(member=member, actor=actor, remarks=remarks)
 
         elif txn_type == BookTransaction.TYPE_RETURN:
-            # Align with model's updated signature
             return book.mark_returned(actor=actor, returned_by=member, remarks=remarks)
 
         elif txn_type in {
@@ -156,9 +223,7 @@ class BookTransactionSerializer(serializers.ModelSerializer):
         }:
             return book.mark_status(txn_type, actor=actor, remarks=remarks)
 
-        raise serializers.ValidationError({"txn_type": "Invalid transaction type."})
-
-
+        raise DRFValidationError({"txn_type": "Invalid transaction type."})
 
 class AuditLogSerializer(serializers.ModelSerializer):
     actor_name = serializers.SerializerMethodField()
@@ -249,13 +314,22 @@ class BulkBookImportSerializer(serializers.Serializer):
 # ----------------------------------------------------------------------
 class PublicBookSerializer(serializers.ModelSerializer):
     issued_to_name = serializers.SerializerMethodField()
+    cover_image = serializers.SerializerMethodField()
+
 
     class Meta:
         model = Book
         fields = [
             "id", "book_code", "title", "author", "isbn", "category",
-            "status", "shelf_location", "issued_to_name",
+            "status", "shelf_location", "issued_to_name","cover_image",
         ]
 
     def get_issued_to_name(self, obj):
         return obj.issued_to.username if obj.issued_to else None
+    def get_cover_image(self, obj):
+        request = self.context.get("request")
+        if obj.cover_image:
+            if request:
+                return request.build_absolute_uri(obj.cover_image.url)
+            return obj.cover_image.url
+        return None

@@ -21,24 +21,30 @@ export default function Sidebar({ collapsed, onClose, user }) {
   const { logout } = useAuth();
   const navigate = useNavigate();
 
-  // ✅ Updated Nav Items — use the exact labels/paths requested
-  const nav = [
-    // Public / User
+  // ===========================================
+  // FINAL NAVIGATION RULES (CLEAN)
+  // ===========================================
+
+  const userNav = [
     { to: "/", label: "Home", icon: <Home size={16} /> },
     { to: "/books", label: "Books", icon: <BookOpen size={16} /> },
+    { to: "/about", label: "About", icon: <Info size={16} /> },
     { to: "/user/dashboard", label: "User Dashboard", icon: <LayoutDashboard size={16} /> },
     { to: "/user/transactions", label: "User Transactions", icon: <BookOpen size={16} /> },
-    { to: "/about", label: "About", icon: <Info size={16} /> },
-
-    // Admin-only
-    { to: "/admin/dashboard", label: "Admin Dashboard", icon: <LayoutDashboard size={16} />, admin: true },
-    { to: "/admin/books", label: "BooksManager", icon: <BookOpen size={16} />, admin: true },
-    { to: "/admin/library-ops", label: "LibraryOperations", icon: <LibraryBig size={16} />, admin: true },
-    { to: "/admin/reports", label: "Reports", icon: <FileText size={16} />, admin: true },
-    { to: "/admin/members", label: "MembersManager", icon: <Users size={16} />, admin: true },
-    { to: "/admin/transactions", label: "AdminTransactionList", icon: <BookCopy size={16} />, admin: true },
-    { to: "/admin/userview", label: "AdminUserView", icon: <User size={16} />, admin: true },
   ];
+
+  const adminNav = [
+    { to: "/admin/dashboard", label: "Admin Dashboard", icon: <LayoutDashboard size={16} /> },
+    { to: "/admin/books", label: "BooksManager", icon: <BookOpen size={16} /> },
+    { to: "/admin/library-ops", label: "LibraryOperations", icon: <LibraryBig size={16} /> },
+    { to: "/admin/reports", label: "Reports", icon: <FileText size={16} /> },
+    { to: "/admin/members", label: "MembersManager", icon: <Users size={16} /> },
+    { to: "/admin/transactions", label: "AdminTransactionList", icon: <BookCopy size={16} /> },
+    { to: "/admin/userview", label: "AdminUserView", icon: <User size={16} /> },
+  ];
+
+  // Select menu based on role
+  const nav = user?.role === "admin" ? adminNav : userNav;
 
   return (
     <motion.aside
@@ -49,7 +55,7 @@ export default function Sidebar({ collapsed, onClose, user }) {
     >
       {/* Header */}
       <div className="flex items-center justify-between h-[56px] px-5 bg-gradient-to-r from-blue-50 to-white shadow-[0_2px_6px_rgba(0,0,0,0.05)]">
-        <Link to="/home" className="flex items-center gap-2">
+        <Link to="/" className="flex items-center gap-2">
           <BookOpen size={20} className="text-blue-600" />
           <span className="text-base font-semibold text-blue-700 tracking-wide">ILAS</span>
         </Link>
@@ -65,7 +71,6 @@ export default function Sidebar({ collapsed, onClose, user }) {
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto p-3 space-y-1 mt-2">
         {nav.map((item) => {
-          if (item.admin && user?.role !== "admin") return null;
           const active = location.pathname === item.to;
           return (
             <Link
