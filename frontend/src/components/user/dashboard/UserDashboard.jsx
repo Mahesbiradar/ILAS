@@ -1,90 +1,124 @@
 // src/components/user/dashboard/UserDashboard.jsx
 import React, { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { Loader, Card, PageTitle, SectionHeader } from "../../common";
+import { Loader, PageTitle } from "../../common";
 import DashboardCard from "../../common/DashboardCard";
-import UserTransactionList from "../transactions/UserTransactionList";
 import { Book, Clock, CheckCircle } from "lucide-react";
-import { getActiveTransactions } from "../../../services/transactionApi";
 import toast from "react-hot-toast";
+
+import { getUserDashboardStats } from "../../../api/userApi";
 
 export default function UserDashboard() {
   const [stats, setStats] = useState({
     borrowed: 0,
     returned: 0,
-    pending: 0,
+    overdue: 0,
   });
+
+  const [lastTransactions, setLastTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
-  const loadUserStats = useCallback(async () => {
+  const loadStats = useCallback(async () => {
     try {
       setLoading(true);
-      
-      // Fetch counts for each status using limit=1 to minimize payload
-      const [borrowedRes, returnedRes, pendingRes] = await Promise.all([
-        getActiveTransactions({ page: 1, page_size: 1, status: "approved" }),
-        getActiveTransactions({ page: 1, page_size: 1, status: "returned" }),
-        getActiveTransactions({ page: 1, page_size: 1, status: "pending" }),
-      ]);
+      const data = await getUserDashboardStats();
 
       setStats({
-        borrowed: borrowedRes.count || 0,
-        returned: returnedRes.count || 0,
-        pending: pendingRes.count || 0,
+        borrowed: data.active_count || 0,
+        returned: data.returned_count || 0,
+        overdue: data.overdue_count || 0,
       });
+
+      setLastTransactions(data.last_transactions || []);
     } catch (err) {
-      console.error("Error loading user dashboard stats:", err);
-      toast.error("Failed to load dashboard statistics.");
-      setStats({ borrowed: 0, returned: 0, pending: 0 });
+      console.error(err);
+      toast.error("Unable to load dashboard.");
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    loadUserStats();
-  }, [loadUserStats]);
+    loadStats();
+  }, [loadStats]);
 
   if (loading) return <Loader />;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-50 to-emerald-100 dark:from-gray-900 dark:to-gray-800 px-4 py-8">
+    <div className="min-h-screen bg-gradient-to-br from-[#e9f7ef] to-[#d3f5e4] px-4 py-6">
       <div className="max-w-5xl mx-auto">
-        <PageTitle 
-          title="Welcome to Your Library" 
-          subtitle="Manage your borrowed books and requests"
+
+        {/* Page Title */}
+        <PageTitle
+          title="Welcome to Your Library"
+          subtitle="Your borrowing activity at a glance"
           icon={Book}
         />
 
-      {/* --- Dashboard Stats --- */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-10">
-        <DashboardCard
-          title="Borrowed"
-          value={stats.borrowed}
-          color="blue"
-          icon={<Book />}
-          description="Currently borrowed books"
-          onClick={() => navigate("/user/transactions")}
-        />
-        <DashboardCard
-          title="Pending Requests"
-          value={stats.pending}
-          color="yellow"
-          icon={<Clock />}
-          description="Awaiting admin approval"
-        />
-        <DashboardCard
-          title="Returned"
-          value={stats.returned}
-          color="green"
-          icon={<CheckCircle />}
-          description="Completed returns"
-        />
-      </div>
+        {/* Dashboard Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+          <DashboardCard
+            title="Borrowed"
+            value={stats.borrowed}
+            color="blue"
+            icon={<Book />}
+            description="Books currently borrowed"
+            onClick={() => navigate("/user/transactions")}
+          />
 
-      {/* --- User Activity Sections --- */}
-      <UserTransactionList />
+          <DashboardCard
+            title="Overdue"
+            value={stats.overdue}
+            color="yellow"
+            icon={<Clock />}
+            description="Books past due date"
+          />
+
+          <DashboardCard
+            title="Returned"
+            value={stats.returned}
+            color="green"
+            icon={<CheckCircle />}
+            description="Completed returns"
+          />
+        </div>
+
+        {/* Recent Activity */}
+        <div className="bg-white rounded-xl shadow-lg p-5 border border-gray-200">
+          <h2 className="text-xl font-semibold text-gray-800 mb-4 flex items-center gap-2">
+            <span>📘</span> Recent Activity
+          </h2>
+
+          {!lastTransactions.length ? (
+            <p className="text-gray-500 text-sm">No recent activity.</p>
+          ) : (
+            <div className="divide-y">
+              {lastTransactions.map((t) => (
+                <div
+                  key={t.id}
+                  className="py-3 flex justify-between items-center hover:bg-gray-50 transition rounded-md px-1"
+                >
+                  {/* Book & Type */}
+                  <div>
+                    <div className="font-medium text-gray-900 text-[15px]">
+                      {t.book_title}
+                    </div>
+                    <div className="text-gray-500 text-xs font-medium tracking-wide uppercase">
+                      {t.txn_type}
+                    </div>
+                  </div>
+
+                  {/* Date */}
+                  <div className="text-gray-600 text-xs">
+                    {t.action_date ? new Date(t.action_date).toLocaleDateString() : "—"}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
       </div>
     </div>
   );

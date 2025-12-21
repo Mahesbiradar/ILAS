@@ -1,0 +1,145 @@
+{
+  "info": {
+    "name": "ILAS API Collection",
+    "_postman_id": "ilas-api-collection-001",
+    "description": "Postman collection for ILAS Results & Discussion Chapter APIs",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "6.6.1 Books API Response",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/v1/library/books/",
+          "host": ["{{base_url}}"],
+          "path": ["v1", "library", "books", ""]
+        }
+      }
+    },
+    {
+      "name": "6.6.1 Members API Response",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/v1/admin/members/",
+          "host": ["{{base_url}}"],
+          "path": ["v1", "admin", "members", ""]
+        }
+      }
+    },
+    {
+      "name": "6.6.2 Issue Book API",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"user_id\": 101,\n  \"book_id\": 1\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/v1/admin/transactions/issue/",
+          "host": ["{{base_url}}"],
+          "path": ["v1", "admin", "transactions", "issue", ""]
+        }
+      }
+    },
+    {
+      "name": "6.6.2 Return Book API",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"user_id\": 101,\n  \"book_id\": 1\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/v1/admin/transactions/return/",
+          "host": ["{{base_url}}"],
+          "path": ["v1", "admin", "transactions", "return", ""]
+        }
+      }
+    },
+    {
+      "name": "6.6.3 Error - Book Not Available",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"user_id\": 101,\n  \"book_id\": 1\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/v1/admin/transactions/issue/",
+          "host": ["{{base_url}}"],
+          "path": ["v1", "admin", "transactions", "issue", ""]
+        }
+      }
+    },
+    {
+      "name": "6.6.3 Error - Invalid Book ID",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"user_id\": 101,\n  \"book_id\": 999\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/v1/admin/transactions/issue/",
+          "host": ["{{base_url}}"],
+          "path": ["v1", "admin", "transactions", "issue", ""]
+        }
+      }
+    },
+    {
+      "name": "6.6.3 Error - Book Not Issued",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"user_id\": 101,\n  \"book_id\": 2\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/v1/admin/transactions/return/",
+          "host": ["{{base_url}}"],
+          "path": ["v1", "admin", "transactions", "return", ""]
+        }
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://127.0.0.1:8000/api"
+    }
+  ]
+}

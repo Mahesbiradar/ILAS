@@ -57,6 +57,9 @@ from .views_reports import (
     DashboardStats,
 )
 
+from .views_user import UserDashboardAPIView, UserTransactionHistoryAPIView
+
+
 # ----------------------------------------------------------
 # Health check (for container orchestration readiness probes)
 # ----------------------------------------------------------
@@ -108,6 +111,7 @@ admin_patterns = [
     path("transactions/active/", ActiveTransactionsView.as_view(), name="active-transactions"),
     path("transactions/all/", AllTransactionsView.as_view(), name="transactions-all"),
 
+
 ]
 
 # ----------------------------------------------------------
@@ -126,4 +130,11 @@ urlpatterns = [
     path("api/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"),
     path("api/redoc/", SpectacularRedocView.as_view(url_name="schema"), name="redoc-ui"),
 
-]
+   # USER DASHBOARD & TRANSACTIONS (Correct API-prefixed URLs)
+    path("api/v1/library/user/dashboard/", UserDashboardAPIView.as_view(), name="user-dashboard"),
+    path("api/v1/library/user/transactions/", UserTransactionHistoryAPIView.as_view(), name="user-transactions"),
+
+    path("api/v1/library/barcodes/", include("library.barcode.urls")),
+
+
+    ]

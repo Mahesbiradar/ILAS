@@ -185,3 +185,16 @@ export async function getTaskStatus(taskId) {
 }
 
 
+/* ------------------------------
+  Barcode Generator (Admin)
+-------------------------------*/
+export async function generateBarcodesPDF(rawText) {
+  const res = await api.post(
+    "v1/library/barcodes/generate/",
+    { data: rawText },
+    { responseType: "blob" } // VERY IMPORTANT
+  );
+  return res;
+}
+
+
