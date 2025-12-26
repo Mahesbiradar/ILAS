@@ -277,7 +277,11 @@ CELERY_TASK_TIME_LIMIT = 30 * 60
 # ----------------------------------------------------------
 # Celery Beat Schedule (M5 periodic jobs)
 # ----------------------------------------------------------
-from celery.schedules import crontab
+USE_CELERY = os.getenv("USE_CELERY", "False") == "True"
+
+if USE_CELERY:
+    from celery.schedules import crontab
+
 
 CELERY_BEAT_SCHEDULE = {
     "archive-old-transactions-weekly": {
