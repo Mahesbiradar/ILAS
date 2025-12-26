@@ -33,7 +33,7 @@ class User(AbstractUser):
     designation = models.CharField(max_length=100, blank=True, null=True)  # for teachers
 
     # Contact
-    phone = models.CharField(max_length=15, blank=True, null=True)
+    phone = models.CharField(max_length=15, blank=True, null=True, unique=True)
     email = models.EmailField(unique=True)
 
     is_verified = models.BooleanField(default=False)
@@ -84,20 +84,35 @@ class PasswordResetOTP(models.Model):
 
 
 # 🧾 Member Logs Model (unchanged, kept for admin audit)
+from django.db import models
+
 class MemberLog(models.Model):
-    ACTIONS = [
+    ACTION_CHOICES = [
         ("added", "Added"),
         ("edited", "Edited"),
         ("deleted", "Deleted"),
         ("promoted", "Promoted"),
     ]
-    member = models.CharField(max_length=100)
-    action = models.CharField(max_length=20, choices=ACTIONS)
-    performed_by = models.CharField(max_length=100)
+
+    action = models.CharField(max_length=20, choices=ACTION_CHOICES)
+
+    # 🔹 Snapshot of member at action time
+    member_username = models.CharField(max_length=150, blank=True, default="-")
+    member_email = models.EmailField(blank=True, default="-")
+    member_role = models.CharField(max_length=30, blank=True, default="-")
+    member_unique_id = models.CharField(max_length=50, blank=True, default="-")
+
+    # 🔹 Who performed the action
+    performed_by = models.CharField(max_length=150)
+
     timestamp = models.DateTimeField(auto_now_add=True)
 
+    class Meta:
+        ordering = ["-timestamp"]
+
     def __str__(self):
-        return f"{self.member} - {self.action} by {self.performed_by}"
+        return f"{self.action} - {self.member_username}"
+
 
 
 

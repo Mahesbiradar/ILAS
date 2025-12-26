@@ -84,3 +84,32 @@ def safe_celery_call(task_func: Callable[..., Any], *args, **kwargs) -> Dict[str
 #         # Example task: compute inventory snapshot and save to a file or DB
 #         # Return a small result (status) for the demo
 #         return {"status": "ok"}
+
+from django.db.models import Sum, Count, Q
+from django.core.cache import cache
+from decimal import Decimal
+from django.utils import timezone
+from .models import Book, BookTransaction
+
+DASHBOARD_CACHE_KEY = "ilas_dashboard_stats"
+
+def recompute_dashboard_stats():
+    data = {
+        "total_books": Book.objects.filter(is_active=True).count(),
+        "issued_count": Book.objects.filter(status=Book.STATUS_ISSUED).count(),
+        "overdue_count": BookTransaction.objects.filter(
+            txn_type=BookTransaction.TYPE_ISSUE,
+            is_active=True,
+            due_date__lt=timezone.now(),
+        ).count(),
+        "total_unpaid_fines": str(
+            BookTransaction.objects.filter(is_active=True, fine_amount__gt=0)
+            .aggregate(total=Sum("fine_amount"))["total"]
+            or Decimal("0.00")
+        ),
+    }
+    cache.set(DASHBOARD_CACHE_KEY, data, timeout=300)
+    return data
+
+def invalidate_dashboard_cache():
+    cache.delete("ilas_dashboard_stats")

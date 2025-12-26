@@ -1,159 +1,186 @@
-// src/components/admin/members/EditMemberModal.jsx
 import React, { useEffect, useState } from "react";
 import { updateMember } from "../../../api/members";
-import { XCircle } from "lucide-react";
 import toast from "react-hot-toast";
 
 export default function EditMemberModal({ member, onClose, onSave }) {
-  const [form, setForm] = useState({
-    id: "",
-    username: "",
-    email: "",
-    phone: "",
-    usn: "",
-    role: "",
-  });
+  const [form, setForm] = useState({});
 
   useEffect(() => {
     if (member) {
       setForm({
-        id: member.id || "",
+        id: member.id,
+        first_name: member.first_name || "",
+        last_name: member.last_name || "",
         username: member.username || "",
         email: member.email || "",
         phone: member.phone || "",
-        usn: member.usn || "",
-        role: member.role || "user",
+        unique_id: member.unique_id || "",
+        role: member.role || "student",
+        department: member.department || "",
+        year: member.year || "",
+        designation: member.designation || "",
+        is_active: member.is_active ?? true,
+        is_verified: member.is_verified ?? false,
       });
     }
   }, [member]);
 
-  const handleChange = (e) =>
-    setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
+  const handleChange = (e) => {
+    const { name, value, type, checked } = e.target;
+    setForm((prev) => ({
+      ...prev,
+      [name]: type === "checkbox" ? checked : value,
+    }));
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!form.id) {
-      toast.error("Invalid member ID");
-      return;
-    }
     try {
       const updated = await updateMember(form.id, form);
-      toast.success("Member updated successfully!");
+      toast.success("Member updated successfully");
       onSave(updated);
     } catch {
       toast.error("Failed to update member");
     }
   };
 
-  const handlePromote = async () => {
-    if (!form.id) {
-      toast.error("Invalid member ID");
-      return;
-    }
-
-    const nextRole =
-      form.role === "user"
-        ? "librarian"
-        : form.role === "librarian"
-        ? "admin"
-        : "admin";
-
-    const updated = { ...form, role: nextRole };
-    try {
-      const res = await updateMember(form.id, updated);
-      toast.success(`${form.username} promoted to ${nextRole}`);
-      onSave(res);
-    } catch {
-      toast.error("Promotion failed");
-    }
-  };
-
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
-      <div className="bg-white p-6 rounded-2xl shadow-lg w-full max-w-md">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-lg font-semibold text-gray-800">
-            Edit Member Details
-          </h2>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-red-500 transition"
-          >
-            <XCircle className="w-6 h-6" />
-          </button>
-        </div>
+    <div className="fixed inset-0 flex items-center justify-center z-50">
+      <div className="bg-white p-6 rounded-xl shadow-lg w-full max-w-xl">
+        <h2 className="text-lg font-semibold mb-4">Edit Member Details</h2>
 
         <form onSubmit={handleSubmit} className="space-y-3">
-          <div>
-            <label className="text-sm text-gray-600">Username</label>
-            <input
-              name="username"
-              value={form.username}
-              onChange={handleChange}
-              className="w-full border p-2 rounded-lg"
-              required
-            />
-          </div>
-
-          <div>
-            <label className="text-sm text-gray-600">Email</label>
-            <input
-              name="email"
-              type="email"
-              value={form.email}
-              onChange={handleChange}
-              className="w-full border p-2 rounded-lg"
-              required
-            />
-          </div>
-
+          {/* Names */}
           <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-sm text-gray-600">Phone</label>
-              <input
-                name="phone"
-                value={form.phone}
-                onChange={handleChange}
-                className="w-full border p-2 rounded-lg"
-              />
-            </div>
-
-            <div>
-              <label className="text-sm text-gray-600">USN</label>
-              <input
-                name="usn"
-                value={form.usn}
-                onChange={handleChange}
-                className="w-full border p-2 rounded-lg"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="text-sm text-gray-600">Role</label>
-            <select
-              name="role"
-              value={form.role}
+            <input
+              name="first_name"
+              value={form.first_name}
               onChange={handleChange}
-              className="w-full border p-2 rounded-lg"
-            >
-              <option value="user">User</option>
-              <option value="librarian">Librarian</option>
-              <option value="admin">Admin</option>
-            </select>
+              placeholder="First Name"
+              className="border p-2 rounded"
+            />
+            <input
+              name="last_name"
+              value={form.last_name}
+              onChange={handleChange}
+              placeholder="Last Name"
+              className="border p-2 rounded"
+            />
           </div>
 
-          <div className="flex justify-end gap-3 pt-3">
+          {/* Login Info */}
+          <input
+            name="username"
+            value={form.username}
+            onChange={handleChange}
+            placeholder="Username"
+            className="border p-2 rounded w-full"
+            required
+          />
+
+          <input
+            name="email"
+            type="email"
+            value={form.email}
+            onChange={handleChange}
+            placeholder="Email"
+            className="border p-2 rounded w-full"
+            required
+          />
+
+          {/* IDs */}
+          <div className="grid grid-cols-2 gap-3">
+            <input
+              name="phone"
+              value={form.phone}
+              onChange={handleChange}
+              placeholder="Phone"
+              className="border p-2 rounded"
+            />
+            <input
+              name="unique_id"
+              value={form.unique_id}
+              onChange={handleChange}
+              placeholder="USN / Employee ID"
+              className="border p-2 rounded"
+            />
+          </div>
+
+          {/* Academic */}
+          <div className="grid grid-cols-2 gap-3">
+            <input
+              name="department"
+              value={form.department}
+              onChange={handleChange}
+              placeholder="Department"
+              className="border p-2 rounded"
+            />
+            <input
+              name="year"
+              value={form.year}
+              onChange={handleChange}
+              placeholder="Year"
+              className="border p-2 rounded"
+            />
+          </div>
+
+          <input
+            name="designation"
+            value={form.designation}
+            onChange={handleChange}
+            placeholder="Designation"
+            className="border p-2 rounded w-full"
+          />
+
+          {/* Role */}
+          <select
+            name="role"
+            value={form.role}
+            onChange={handleChange}
+            className="border p-2 rounded w-full"
+          >
+            <option value="student">Student</option>
+            <option value="teacher">Teacher/Staff</option>
+            <option value="user">User</option>
+            <option value="librarian">Librarian</option>
+            <option value="admin">Admin</option>
+          </select>
+
+          {/* Flags */}
+          <div className="flex gap-6">
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                name="is_active"
+                checked={form.is_active}
+                onChange={handleChange}
+              />
+              Active
+            </label>
+
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                name="is_verified"
+                checked={form.is_verified}
+                onChange={handleChange}
+              />
+              Verified
+            </label>
+          </div>
+
+          {/* Actions */}
+          <div className="flex justify-end gap-3 pt-4">
             <button
               type="button"
-              onClick={handlePromote}
-              className="px-4 py-2 bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200"
+              onClick={onClose}
+              className="px-4 py-2 border rounded"
             >
-              Promote
+              Cancel
             </button>
             <button
               type="submit"
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              className="px-4 py-2 bg-blue-600 text-white rounded"
             >
               Save Changes
             </button>

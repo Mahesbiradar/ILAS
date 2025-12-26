@@ -60,7 +60,7 @@ export default function AdminTransactionList() {
           id: t.id,
           txn_type: t.txn_type,
           book_code: t.book_code,
-          bookTitle: t.book_title,
+          bookTitle: t.book_title || t.bookTitle || "",
           member_name: t.member_name,
           member_unique_id: t.member_unique_id,
           issue_date: t.issue_date,
@@ -177,9 +177,8 @@ export default function AdminTransactionList() {
               setTab("active");
               setPage(1);
             }}
-            className={`px-2 py-1 rounded text-xs ${
-              tab === "active" ? "bg-blue-600 text-white" : "bg-gray-100"
-            }`}
+            className={`px-2 py-1 rounded text-xs ${tab === "active" ? "bg-blue-600 text-white" : "bg-gray-100"
+              }`}
           >
             Active
           </button>
@@ -189,9 +188,8 @@ export default function AdminTransactionList() {
               setTab("all");
               setPage(1);
             }}
-            className={`px-2 py-1 rounded text-xs ${
-              tab === "all" ? "bg-blue-600 text-white" : "bg-gray-100"
-            }`}
+            className={`px-2 py-1 rounded text-xs ${tab === "all" ? "bg-blue-600 text-white" : "bg-gray-100"
+              }`}
           >
             History
           </button>

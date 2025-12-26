@@ -175,11 +175,10 @@ export default function MembersManager() {
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`px-4 py-3 font-medium transition-colors ${
-              activeTab === tab.id
+            className={`px-4 py-3 font-medium transition-colors ${activeTab === tab.id
                 ? "text-blue-600 border-b-2 border-blue-600"
                 : "text-gray-600 hover:text-gray-800"
-            }`}
+              }`}
           >
             {tab.label}
           </button>
@@ -207,6 +206,8 @@ export default function MembersManager() {
             >
               <option value="">All Roles</option>
               <option value="user">User</option>
+              <option value="student">Student</option>
+              <option value="teacher">Teacher</option>
               <option value="librarian">Librarian</option>
               <option value="admin">Admin</option>
             </select>
@@ -233,37 +234,37 @@ export default function MembersManager() {
             <>
               <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-100">
                 <MemberTable
-                members={members}
-                onEdit={handleEdit}
-                onDelete={handleDelete}
-                onPromote={handlePromote}
+                  members={members}
+                  onEdit={handleEdit}
+                  onDelete={handleDelete}
+                  onPromote={handlePromote}
                 />
 
                 {/* Pagination Controls */}
                 <div className="flex justify-between items-center mt-6 p-4 bg-gray-50 rounded-lg">
-                <div className="text-sm text-gray-600">
-                  Showing {members.length} of {pagination.count} members
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => pagination.goToPreviousPage()}
-                    disabled={pagination.page === 1}
-                    className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    ← Previous
-                  </button>
-                  <div className="px-4 py-2 text-sm font-medium">
-                    Page {pagination.page} of {pagination.totalPages || 1}
+                  <div className="text-sm text-gray-600">
+                    Showing {members.length} of {pagination.count} members
                   </div>
-                  <button
-                    onClick={() => pagination.goToNextPage()}
-                    disabled={pagination.page >= pagination.totalPages}
-                    className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    Next →
-                  </button>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => pagination.goToPreviousPage()}
+                      disabled={pagination.page === 1}
+                      className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      ← Previous
+                    </button>
+                    <div className="px-4 py-2 text-sm font-medium">
+                      Page {pagination.page} of {pagination.totalPages || 1}
+                    </div>
+                    <button
+                      onClick={() => pagination.goToNextPage()}
+                      disabled={pagination.page >= pagination.totalPages}
+                      className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Next →
+                    </button>
+                  </div>
                 </div>
-              </div>
               </div>
             </>
           )}

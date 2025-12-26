@@ -65,16 +65,20 @@ export async function fetchMemberLogs(params = {}) {
  * Export member logs as CSV (if supported)
  */
 export async function exportMemberLogs() {
-  const res = await api.get(`auth/members/export/`, { responseType: "blob" });
-  return res;
+  const res = await api.get("auth/members/export/", {
+    responseType: "blob",
+  });
+  return res.data;   // ✅ FIX
 }
 
 /**
  * Export all members as CSV (if supported)
  */
 export async function exportAllMembers() {
-  const res = await api.get(`auth/members/export/all/`, { responseType: "blob" });
-  return res;
+  const res = await api.get("auth/members/export/all/", {
+    responseType: "blob",
+  });
+  return res.data;   // ✅ FIX
 }
 
 /**

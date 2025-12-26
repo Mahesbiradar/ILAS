@@ -13,6 +13,7 @@ class BulkBarcodeGenerateView(APIView):
     @method_decorator(csrf_exempt)
     def post(self, request):
         raw_text = request.data.get("data", "")
+        page_size = request.data.get("page_size", "A4")  # ✅ NEW
 
         if not raw_text.strip():
             return HttpResponse(
@@ -21,14 +22,15 @@ class BulkBarcodeGenerateView(APIView):
                 content_type="text/plain",
             )
 
-        pdf_buffer = generate_barcode_pdf(raw_text)
+        # ✅ Pass page_size to generator
+        pdf_buffer = generate_barcode_pdf(raw_text, page_size)
 
         response = HttpResponse(
             pdf_buffer,
             content_type="application/pdf",
         )
         response["Content-Disposition"] = (
-            'attachment; filename="barcodes.pdf"'
+            f'attachment; filename="barcodes_{page_size}.pdf"'
         )
 
         return response

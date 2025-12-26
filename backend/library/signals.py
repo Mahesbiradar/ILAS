@@ -7,6 +7,7 @@ ILAS v5 – Thread-Safe, Audit-Safe Signals
 ✅ Logs Book and BookTransaction events (R7.01–R7.03)
 ✅ Thread-local reentrant lock for non-recursive audit safety
 """
+from .tasks import invalidate_dashboard_cache
 
 import logging
 import threading
@@ -17,7 +18,11 @@ from django.core.files.storage import default_storage
 
 from .models import Book, BookTransaction, AuditLog, create_audit
 
+
+
 logger = logging.getLogger(__name__)
+
+
 
 # ----------------------------------------------------------------------
 # Thread-local audit lock (reentrant-safe)
@@ -85,6 +90,8 @@ def prevent_delete_if_active(sender, instance, **kwargs):
 @receiver(post_save, sender=BookTransaction)
 def log_transaction_activity(sender, instance, created, **kwargs):
     """Create AuditLog for BookTransaction (R7.01–R7.03)."""
+    invalidate_dashboard_cache()
+
     if not created:
         return
     try:
@@ -129,6 +136,7 @@ def log_transaction_activity(sender, instance, created, **kwargs):
 @receiver(post_save, sender=Book)
 def log_book_activity(sender, instance, created, **kwargs):
     """Create AuditLog when a Book is added or edited."""
+    invalidate_dashboard_cache()
     if getattr(instance, "_suppress_audit", False):
         return
     if _audit_locked():
@@ -170,6 +178,7 @@ def log_book_activity(sender, instance, created, **kwargs):
 @receiver(post_delete, sender=Book)
 def log_book_delete(sender, instance, **kwargs):
     """Record audit entry when a Book is deleted."""
+    invalidate_dashboard_cache()
     actor = getattr(instance, "last_modified_by", None)
     if not actor:
         return
@@ -185,3 +194,19 @@ def log_book_delete(sender, instance, **kwargs):
         )
     except Exception as e:
         logger.exception("Book deletion audit failed for %s: %s", instance.book_code, e)
+
+
+from django.core.cache import cache
+from .tasks import recompute_dashboard_stats
+
+class DashboardStats(APIView):
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        cache_key = "ilas_dashboard_stats"
+        data = cache.get(cache_key)
+
+        if not data:
+            data = recompute_dashboard_stats()
+
+        return Response(data)

@@ -188,13 +188,43 @@ export async function getTaskStatus(taskId) {
 /* ------------------------------
   Barcode Generator (Admin)
 -------------------------------*/
-export async function generateBarcodesPDF(rawText) {
+export async function generateBarcodesPDF(rawText, pageSize = "A4") {
   const res = await api.post(
     "v1/library/barcodes/generate/",
-    { data: rawText },
-    { responseType: "blob" } // VERY IMPORTANT
+    {
+      data: rawText,
+      page_size: pageSize, // ✅ NEW (A4 / A3)
+    },
+    {
+      responseType: "blob", // VERY IMPORTANT
+    }
   );
   return res;
 }
 
 
+/* ------------------------------
+  Admin – Book Excel Exports
+-------------------------------*/
+
+// 📘 Book Master Export (with filters & field selection)
+export async function exportBookMaster(params = {}) {
+  return api.get(
+    "v1/admin/books/export/",
+    {
+      params,
+      responseType: "blob", // important for Excel
+    }
+  );
+}
+
+// 📜 Book Audit Logs Export
+export async function exportBookLogs(params = {}) {
+  return api.get(
+    "v1/admin/books/logs/export/",
+    {
+      params,
+      responseType: "blob",
+    }
+  );
+}

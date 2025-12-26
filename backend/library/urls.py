@@ -55,6 +55,8 @@ from .views_reports import (
     OverdueReport,
     MemberHistoryReport,
     DashboardStats,
+    AdminBookExportView, 
+    AdminBookLogExportView,
 )
 
 from .views_user import UserDashboardAPIView, UserTransactionHistoryAPIView
@@ -136,5 +138,8 @@ urlpatterns = [
 
     path("api/v1/library/barcodes/", include("library.barcode.urls")),
 
+    # Admin Excel exports
+    path("api/v1/admin/books/export/", AdminBookExportView.as_view(), name="admin-book-export"),
+    path("api/v1/admin/books/logs/export/", AdminBookLogExportView.as_view(), name="admin-book-log-export"),
 
     ]

@@ -131,6 +131,8 @@ class BookViewSet(viewsets.ModelViewSet):
                 | Q(author__icontains=search)
                 | Q(isbn__icontains=search)
                 | Q(book_code__icontains=search)
+                | Q(accession_no__icontains=search)
+                | Q(shelf_location__icontains=search)
             )
 
         # --- Category Filter ---
@@ -843,7 +845,7 @@ class ActiveTransactionsView(APIView):
             data.append({
                 "transaction_id": t.id,
                 "book_code": t.book.book_code,
-                "title": t.book.title,
+                "book_title": t.book.title,
                 "member_name": t.member.username if t.member else None,
                 "member_id": t.member.id if t.member else None,
                 "member_unique_id": getattr(t.member, "unique_id", None),
@@ -864,15 +866,27 @@ class PublicBookListView(APIView):
     pagination_class = StandardResultsSetPagination
 
     def get(self, request):
-        search = request.query_params.get("q")
         qs = Book.objects.filter(is_active=True)
+
+        # 🔍 Search
+        search = request.query_params.get("q", "").strip()
         if search:
-            qs = qs.filter(Q(title__icontains=search) | Q(author__icontains=search))
+            qs = qs.filter(
+                Q(title__icontains=search) |
+                Q(author__icontains=search)
+            )
+
+        # 📚 CATEGORY FILTER (✅ FIXED POSITION)
+        category = request.query_params.get("category", "").strip()
+        if category:
+            qs = qs.filter(category__iexact=category)
+
+        qs = qs.order_by("title")
+
+        # 📄 Pagination AFTER all filters
         paginator = self.pagination_class()
         page = paginator.paginate_queryset(qs, request, view=self)
-        category = request.query_params.get("category")
-        if category:
-            qs = qs.filter(category__icontains=category)
+
         serializer = PublicBookSerializer(page, many=True)
         return paginator.get_paginated_response(serializer.data)
 
@@ -881,4 +895,9 @@ class LibraryMetaAPIView(APIView):
     def get(self, request):
         categories = Book.objects.values_list("category", flat=True).distinct()
         return Response({"categories": sorted(list(set(categories)))})
+
+from django.core.cache import cache
+from rest_framework.response import Response
+
+DASHBOARD_CACHE_KEY = "admin_dashboard_stats"
 

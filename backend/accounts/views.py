@@ -8,6 +8,13 @@ from django.contrib.auth import authenticate
 from rest_framework.decorators import action, api_view, permission_classes
 from django.http import HttpResponse
 from .permissions import IsRealAdmin
+from rest_framework.filters import SearchFilter, OrderingFilter
+from django_filters.rest_framework import DjangoFilterBackend
+from django.http import HttpResponse
+from django.contrib.auth import get_user_model
+import csv
+
+
 
 from .models import User, MemberLog, PasswordResetOTP
 from .serializers import (
@@ -25,6 +32,9 @@ import csv
 import io
 from datetime import datetime
 from django.utils import timezone
+
+User = get_user_model()
+
 
 # Helper to generate JWT tokens
 def get_tokens_for_user(user):
@@ -141,7 +151,29 @@ class UserDetailView(generics.RetrieveUpdateDestroyAPIView):
 # MemberViewSet (keeps same behavior)
 class MemberViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all().order_by("-id")
-    permission_classes = [AllowAny]  # change to IsAdminUser if needed
+    permission_classes = [IsRealAdmin]  # change to IsAdminUser if needed
+
+    filter_backends = [
+        SearchFilter,
+        DjangoFilterBackend,
+        OrderingFilter,
+    ]
+    search_fields = [
+        "username",
+        "first_name",
+        "email",
+        "phone",
+        "unique_id",
+    ]
+
+    filterset_fields = [
+        "role",
+        "is_active",
+        "is_verified",
+    ]
+    
+    ordering_fields = ["date_joined", "username"]
+
 
     def get_serializer_class(self):
         if self.action == "create":
@@ -151,24 +183,38 @@ class MemberViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         member = serializer.save()
         MemberLog.objects.create(
-            member=member.username,
             action="added",
-            performed_by=self.request.user.username if self.request.user.is_authenticated else "system",
+            member_username=member.username,
+            member_email=member.email,
+            member_role=member.role,
+            member_unique_id=member.unique_id or "-",
+            performed_by=self.request.user.username,
         )
+
 
     def perform_update(self, serializer):
         member = serializer.save()
         MemberLog.objects.create(
-            member=member.username,
             action="edited",
-            performed_by=self.request.user.username if self.request.user.is_authenticated else "system",
+            member_username=member.username,
+            member_email=member.email,
+            member_role=member.role,
+            member_unique_id=member.unique_id or "-",
+            performed_by=self.request.user.username,
         )
 
     def destroy(self, request, *args, **kwargs):
         instance = self.get_object()
         if instance.is_logged_in:
             return Response({"error": "Cannot delete a logged-in user."}, status=status.HTTP_400_BAD_REQUEST)
-        MemberLog.objects.create(member=instance.username, action="deleted", performed_by=self.request.user.username if self.request.user.is_authenticated else "system")
+        MemberLog.objects.create(
+            action="deleted",
+            member_username=instance.username,
+            member_email=instance.email,
+            member_role=instance.role,
+            member_unique_id=instance.unique_id or "-",
+            performed_by=self.request.user.username,
+        )
         self.perform_destroy(instance)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -186,70 +232,123 @@ class MemberViewSet(viewsets.ModelViewSet):
             member.is_staff = True
         member.save()
 
-        MemberLog.objects.create(member=member.username, action="promoted", performed_by=request.user.username if request.user.is_authenticated else "system")
+        MemberLog.objects.create(
+            action="promoted",
+            member_username=member.username,
+            member_email=member.email,
+            member_role=member.role,
+            member_unique_id=member.unique_id or "-",
+            performed_by=request.user.username,
+        )
+
         return Response(UserSerializer(member).data)
 
 
 # Member logs
 @api_view(["GET"])
-@permission_classes([IsRealAdmin])
+@permission_classes([IsAdminUser])
 def member_logs(request):
-    logs = MemberLog.objects.all().order_by("-timestamp")
-    serializer = MemberLogSerializer(logs, many=True)
-    return Response(serializer.data)
+    logs = MemberLog.objects.all()[:500]
+
+    data = []
+    for log in logs:
+        data.append({
+            "action": log.action,
+            "username": log.member_username,
+            "email": log.member_email,
+            "role": log.member_role,
+            "unique_id": log.member_unique_id,
+            "performed_by": log.performed_by,
+            "timestamp": log.timestamp,
+        })
+
+    return Response(data)
+
 
 
 # Export member logs (CSV)
 @api_view(["GET"])
-@permission_classes([IsRealAdmin])
+@permission_classes([IsAdminUser])
 def export_member_logs(request):
-    start_date = request.query_params.get("start")
-    end_date = request.query_params.get("end")
+    if not request.user.is_staff:
+        return HttpResponse(status=403)
 
-    logs = MemberLog.objects.all().order_by("-timestamp")
-    if start_date and end_date:
-        try:
-            start = datetime.strptime(start_date, "%Y-%m-%d")
-            end = datetime.strptime(end_date, "%Y-%m-%d")
-            logs = logs.filter(timestamp__date__range=(start, end))
-        except ValueError:
-            return Response({"error": "Invalid date format (YYYY-MM-DD required)."}, status=status.HTTP_400_BAD_REQUEST)
+    response = HttpResponse(content_type="text/csv")
+    response["Content-Disposition"] = 'attachment; filename="member_activity_logs.csv"'
 
-    output = io.StringIO()
-    writer = csv.writer(output)
-    writer.writerow(["Member", "Action", "Performed By", "Timestamp"])
+    writer = csv.writer(response)
+    writer.writerow([
+        "Action",
+        "Member Username",
+        "Member Email",
+        "Member Role",
+        "Member Unique ID",
+        "Performed By",
+        "Timestamp",
+    ])
+
+    logs = MemberLog.objects.all().order_by("-timestamp")  # ✅ FIX
+
     for log in logs:
-        writer.writerow([log.member, log.action, log.performed_by, log.timestamp.strftime("%Y-%m-%d %H:%M:%S")])
+        writer.writerow([
+            log.action,
+            log.member_username,
+            log.member_email,
+            log.member_role,
+            log.member_unique_id,
+            log.performed_by,   # ✅ FIX (string)
+            log.timestamp.strftime("%Y-%m-%d %H:%M:%S"),
+        ])
 
-    csv_data = output.getvalue()
-    output.close()
-    response = HttpResponse(csv_data, content_type="text/csv")
-    filename = f"member_logs_{start_date or 'all'}_{end_date or 'all'}.csv"
-    response["Content-Disposition"] = f"attachment; filename={filename}"
     return response
 
 
 @api_view(["GET"])
-@permission_classes([IsRealAdmin])
+@permission_classes([IsAdminUser])
 def export_all_members(request):
-    users = User.objects.all().order_by("-id")
-    if not users.exists():
-        return Response({"error": "No members found."}, status=status.HTTP_404_NOT_FOUND)
+    if not request.user.is_staff:
+        return HttpResponse(status=403)
 
-    output = io.StringIO()
-    writer = csv.writer(output)
-    writer.writerow(["ID", "Username", "Email", "Phone", "UniqueID", "Role", "Joined On"])
+    response = HttpResponse(content_type="text/csv")
+    response["Content-Disposition"] = 'attachment; filename="members_master_data.csv"'
 
-    for user in users:
-        writer.writerow([user.id, user.username, user.email, user.phone or "", user.unique_id or "", user.role or "", user.date_joined.strftime("%Y-%m-%d %H:%M:%S")])
+    writer = csv.writer(response)
+    writer.writerow([
+        "Username",
+        "First Name",
+        "Email",
+        "Role",
+        "Unique ID",
+        "Phone",
+        "Department",
+        "Year",
+        "Designation",
+        "Is Active",
+        "Is Verified",
+        "Date Joined",
+        "Last Login",
+    ])
 
-    csv_data = output.getvalue()
-    output.close()
-    response = HttpResponse(csv_data, content_type="text/csv")
-    filename = f'all_members_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv'
-    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    users = User.objects.all().order_by("username")
+
+    for u in users:
+        writer.writerow([
+            u.username,
+            u.first_name or "-",
+            u.email,
+            u.role,
+            u.unique_id or "-",
+            u.phone or "-",
+            u.department or "-",
+            u.year or "-",
+            u.designation or "-",
+            u.is_active,
+            u.is_verified,
+            u.date_joined.strftime("%Y-%m-%d") if u.date_joined else "-",
+            u.last_login.strftime("%Y-%m-%d") if u.last_login else "-",
+        ])
+
     return response
-
 
 # -------------------- Password Reset (OTP) --------------------
 @api_view(["POST"])

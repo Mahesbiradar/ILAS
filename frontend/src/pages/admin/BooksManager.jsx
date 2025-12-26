@@ -3,6 +3,10 @@ import React, { useEffect, useState, useRef } from "react";
 import toast from "react-hot-toast";
 import { BookOpen, Plus, Upload, Barcode, Search } from "lucide-react";
 
+import BookMasterExport from "../../components/admin/books/BookMasterExport";
+import BookLogExport from "../../components/admin/books/BookLogExport";
+
+
 import BookManagerTableCompact from "../../components/admin/books/BookManagerTableCompact";
 import AddBook from "../../components/admin/books/AddBook";
 import EditBook from "../../components/admin/books/EditBook";
@@ -147,6 +151,8 @@ export default function BooksManager() {
     { id: "add", label: "Add Book", icon: Plus },
     { id: "bulk", label: "Bulk Upload", icon: Upload },
     { id: "barcode", label: "Barcode Generator", icon: Barcode },
+    { id: "exports", label: "Exports", icon: Upload },
+
   ];
 
   const totalPages = Math.ceil(totalCount / pageSize);
@@ -174,11 +180,10 @@ export default function BooksManager() {
               <button
                 key={t.id}
                 onClick={() => setActiveTab(t.id)}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded text-sm transition ${
-                  activeTab === t.id
-                    ? "bg-blue-600 text-white shadow"
-                    : "text-gray-700 hover:bg-gray-100"
-                }`}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded text-sm transition ${activeTab === t.id
+                  ? "bg-blue-600 text-white shadow"
+                  : "text-gray-700 hover:bg-gray-100"
+                  }`}
               >
                 <Icon className="w-4 h-4" />
                 {t.label}
@@ -207,7 +212,7 @@ export default function BooksManager() {
               </div>
 
               {/* Category */}
-              
+
               {/* <select
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
@@ -316,6 +321,23 @@ export default function BooksManager() {
             <BarcodeGenerator />
           </div>
         )}
+        {/* EXPORTS TAB */}
+        {activeTab === "exports" && (
+          <div className="space-y-4">
+
+            {/* Book Master Export */}
+            <div className="bg-white rounded-lg shadow p-4">
+              <BookMasterExport />
+            </div>
+
+            {/* Book Logs Export */}
+            <div className="bg-white rounded-lg shadow p-4">
+              <BookLogExport />
+            </div>
+
+          </div>
+        )}
+
 
         {/* EDIT MODAL */}
         {showEditModal && selectedBook && (

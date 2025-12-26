@@ -101,7 +101,7 @@ class Book(models.Model):
     publication_year = models.IntegerField(blank=True, null=True)
     isbn = models.CharField(max_length=64, db_index=True)
     language = models.CharField(max_length=64, blank=True, default="English", null=True)
-    category = models.CharField(max_length=128)
+    category = models.CharField(max_length=128,db_index=True)
     keywords = models.CharField(max_length=512, blank=True, default="", null=True)
     description = models.TextField(blank=True, default="", null=True)
 
@@ -144,7 +144,7 @@ class Book(models.Model):
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    is_active = models.BooleanField(default=True)
+    is_active = models.BooleanField(default=True,db_index=True)
 
     class Meta:
         ordering = ("-created_at",)
@@ -387,15 +387,15 @@ class BookTransaction(models.Model):
     actor = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
                               on_delete=models.SET_NULL, related_name="acted_transactions")
 
-    txn_type = models.CharField(max_length=32, choices=TYPE_CHOICES)
-    issue_date = models.DateTimeField(null=True, blank=True)
-    due_date = models.DateTimeField(null=True, blank=True)
+    txn_type = models.CharField(max_length=32, choices=TYPE_CHOICES,db_index=True)
+    issue_date = models.DateTimeField(null=True, blank=True,db_index=True)
+    due_date = models.DateTimeField(null=True, blank=True,db_index=True)
     return_date = models.DateTimeField(null=True, blank=True)
     fine_amount = models.DecimalField(max_digits=10, decimal_places=2,
                                       default=Decimal("0.00"),
                                       validators=[MinValueValidator(Decimal("0.00"))])
     remarks = models.TextField(blank=True, default="")
-    is_active = models.BooleanField(default=False)
+    is_active = models.BooleanField(default=False,db_index=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

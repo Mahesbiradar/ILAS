@@ -23,6 +23,7 @@ export default function Login() {
     try {
       if (isSignup) {
         const payload = {
+          first_name: data.first_name,
           username: data.username,
           email: data.email,
           password: data.password,
@@ -110,21 +111,19 @@ export default function Login() {
         <div className="flex bg-gray-100 p-1 rounded-xl mb-8 shadow-inner">
           <button
             onClick={() => setIsSignup(false)}
-            className={`flex-1 py-2 rounded-lg font-medium transition-all ${
-              !isSignup
-                ? "bg-white shadow text-blue-700"
-                : "text-gray-500 hover:text-blue-700"
-            }`}
+            className={`flex-1 py-2 rounded-lg font-medium transition-all ${!isSignup
+              ? "bg-white shadow text-blue-700"
+              : "text-gray-500 hover:text-blue-700"
+              }`}
           >
             Login
           </button>
           <button
             onClick={() => setIsSignup(true)}
-            className={`flex-1 py-2 rounded-lg font-medium transition-all ${
-              isSignup
-                ? "bg-white shadow text-blue-700"
-                : "text-gray-500 hover:text-blue-700"
-            }`}
+            className={`flex-1 py-2 rounded-lg font-medium transition-all ${isSignup
+              ? "bg-white shadow text-blue-700"
+              : "text-gray-500 hover:text-blue-700"
+              }`}
           >
             Sign Up
           </button>
@@ -150,9 +149,18 @@ export default function Login() {
                 className="w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-400 outline-none transition-all shadow-sm"
               />
             </div>
-
             {isSignup && (
               <>
+                {/* First Name */}
+                <div className="relative">
+                  <User className="absolute left-3 top-3 text-gray-400" size={18} />
+                  <input
+                    {...register("first_name", { required: true })}
+                    placeholder="First Name"
+                    className="w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-xl
+                            focus:ring-2 focus:ring-blue-400 outline-none transition-all shadow-sm"
+                  />
+                </div>
                 {/* Role */}
                 <div>
                   <select
@@ -206,7 +214,7 @@ export default function Login() {
                     />
                     <input
                       {...register("designation")}
-                      placeholder="Designation (e.g., Assistant Professor)"
+                      placeholder="Designation (e.g., Assistant Professor,Professor)"
                       className="w-full border border-gray-300 p-2.5 rounded-xl focus:ring-2 focus:ring-blue-400 outline-none shadow-sm"
                     />
                   </>

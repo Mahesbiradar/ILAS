@@ -1,72 +1,94 @@
-// src/components/admin/members/MemberLogs.jsx
 import React, { useEffect } from "react";
 
 export default function MemberLogs({ logs = [], onRefresh }) {
-  // Auto-refresh logs every 10 seconds
   useEffect(() => {
-    const interval = setInterval(() => {
-      if (onRefresh) onRefresh();
-    }, 10000); // 10 seconds
+    if (!onRefresh) return;
+    const interval = setInterval(onRefresh, 10000);
     return () => clearInterval(interval);
   }, [onRefresh]);
 
-  const getActionColor = (action) => {
-    switch (action) {
-      case "added":
-        return "bg-green-100 text-green-700";
-      case "edited":
-        return "bg-yellow-100 text-yellow-700";
-      case "deleted":
-        return "bg-red-100 text-red-700";
-      case "promoted":
-        return "bg-purple-100 text-purple-700";
-      default:
-        return "bg-gray-100 text-gray-700";
-    }
+  const badgeClass = (action) => {
+    const map = {
+      added: "bg-green-100 text-green-700",
+      edited: "bg-yellow-100 text-yellow-700",
+      deleted: "bg-red-100 text-red-700",
+      promoted: "bg-purple-100 text-purple-700",
+    };
+    return map[action] || "bg-gray-100 text-gray-700";
   };
 
-  const formatTime = (timestamp) => {
-    if (!timestamp) return "-";
-    const date = new Date(timestamp);
-    return date.toLocaleString("en-IN", {
-      dateStyle: "medium",
-      timeStyle: "short",
-    });
-  };
+  const formatTime = (ts) =>
+    ts
+      ? new Date(ts).toLocaleString("en-IN", {
+        dateStyle: "medium",
+        timeStyle: "short",
+      })
+      : "-";
 
   return (
-    <div className="overflow-x-auto bg-white rounded-lg border border-gray-100 shadow-sm">
-      <table className="w-full text-sm text-left">
-        <thead className="bg-gray-100 text-gray-700 uppercase">
+    <div className="bg-white rounded-lg border border-gray-200 overflow-x-auto">
+      <table className="w-full table-fixed text-xs">
+        <thead className="bg-gray-50 text-gray-600 border-b">
           <tr>
-            <th className="p-3">Action</th>
-            <th className="p-3">Member</th>
-            <th className="p-3">Performed By</th>
-            <th className="p-3">Timestamp</th>
+            <th className="px-2 py-2 w-[90px] text-left">Action</th>
+            {/* <th className="px-2 py-2 w-[130px] text-left">Member ID</th> */}
+            <th className="px-2 py-2 w-[140px] text-left">Username</th>
+            <th className="px-2 py-2 w-[220px] text-left">Email</th>
+            <th className="px-2 py-2 w-[100px] text-left">Role</th>
+            <th className="px-2 py-2 w-[140px] text-left">Performed By</th>
+            <th className="px-2 py-2 w-[170px] text-left">Timestamp</th>
           </tr>
         </thead>
+
         <tbody>
-          {logs.length > 0 ? (
-            logs.map((log, i) => (
-              <tr key={i} className="hover:bg-gray-50 border-t">
-                <td className="p-3">
+          {logs.length ? (
+            logs.map((log, idx) => (
+              <tr
+                key={idx}
+                className="border-t border-gray-100 hover:bg-gray-50"
+              >
+                <td className="px-2 py-1">
                   <span
-                    className={`px-2 py-1 rounded text-xs font-medium ${getActionColor(
+                    className={`px-2 py-[2px] rounded-full text-[10px] font-medium ${badgeClass(
                       log.action
                     )}`}
                   >
                     {log.action}
                   </span>
                 </td>
-                <td className="p-3">{log.member}</td>
-                <td className="p-3">{log.performed_by}</td>
-                <td className="p-3 text-gray-500">{formatTime(log.timestamp)}</td>
+
+                {/* <td className="px-2 py-1 truncate">
+                  {log.member_id || "-"}
+                </td> */}
+
+                <td className="px-2 py-1 truncate">
+                  {log.username || "-"}
+                </td>
+
+                <td className="px-2 py-1 truncate">
+                  {log.email || "-"}
+                </td>
+
+                <td className="px-2 py-1 capitalize">
+                  {log.role || "-"}
+                </td>
+
+                <td className="px-2 py-1 truncate">
+                  {log.performed_by || "-"}
+                </td>
+
+                <td className="px-2 py-1 text-gray-500">
+                  {formatTime(log.timestamp)}
+                </td>
               </tr>
             ))
           ) : (
             <tr>
-              <td colSpan="4" className="p-4 text-center text-gray-500">
-                No activity logs found.
+              <td
+                colSpan={7}
+                className="px-4 py-6 text-center text-gray-500"
+              >
+                No activity logs available.
               </td>
             </tr>
           )}

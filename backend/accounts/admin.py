@@ -15,11 +15,29 @@ class UserAdmin(BaseUserAdmin):
     search_fields = ("username", "email", "unique_id", "department")
 
 
+from django.contrib import admin
+from .models import MemberLog
+
 @admin.register(MemberLog)
 class MemberLogAdmin(admin.ModelAdmin):
-    list_display = ("member", "action", "performed_by", "timestamp")
-    ordering = ("-timestamp",)
-    search_fields = ("member", "performed_by", "action")
+    list_display = (
+        "member_username",
+        "member_email",
+        "member_role",
+        "member_unique_id",
+        "action",
+        "performed_by",
+        "timestamp",
+    )
+
+    list_filter = ("action", "member_role")
+    search_fields = (
+        "member_username",
+        "member_email",
+        "member_unique_id",
+        "performed_by",
+    )
+
 
 
 @admin.register(PasswordResetOTP)

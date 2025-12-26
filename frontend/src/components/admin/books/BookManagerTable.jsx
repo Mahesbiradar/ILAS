@@ -134,9 +134,8 @@ export default function BookManagerTable({
                 return (
                   <React.Fragment key={book_id}>
                     {/* Main Row */}
-                    <tr className={`border-b border-gray-200 hover:bg-blue-50 transition-colors ${
-                      idx % 2 === 0 ? "bg-white" : "bg-gray-50"
-                    }`}>
+                    <tr className={`border-b border-gray-200 hover:bg-blue-50 transition-colors ${idx % 2 === 0 ? "bg-white" : "bg-gray-50"
+                      }`}>
                       {/* Expand Button */}
                       <td className="px-3 py-2">
                         <button
@@ -146,9 +145,8 @@ export default function BookManagerTable({
                         >
                           <ChevronDown
                             size={16}
-                            className={`transform transition-transform duration-300 ${
-                              isExpanded ? "rotate-180" : ""
-                            }`}
+                            className={`transform transition-transform duration-300 ${isExpanded ? "rotate-180" : ""
+                              }`}
                           />
                         </button>
                       </td>

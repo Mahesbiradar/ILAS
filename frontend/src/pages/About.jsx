@@ -87,7 +87,7 @@ export default function About() {
               👩‍🏫 Dr. Vidya Honguntikar
             </p>
             <p className="text-gray-600">
-              Associate Professor, Dept. of Electronics & Telecommunication
+              Professor, Dept. of Electronics & Telecommunication
             </p>
             <p className="text-gray-600">
               Dr. Ambedkar Institute of Technology
@@ -195,9 +195,8 @@ export default function About() {
                 {sec.title}
               </h2>
               <span
-                className={`text-gray-500 transform transition-transform ${
-                  active === sec.id ? "rotate-90" : ""
-                }`}
+                className={`text-gray-500 transform transition-transform ${active === sec.id ? "rotate-90" : ""
+                  }`}
               >
                 ▶
               </span>

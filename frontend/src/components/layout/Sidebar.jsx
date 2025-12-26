@@ -37,7 +37,7 @@ export default function Sidebar({ collapsed, onClose, user }) {
     { to: "/admin/dashboard", label: "Admin Dashboard", icon: <LayoutDashboard size={16} /> },
     { to: "/admin/books", label: "BooksManager", icon: <BookOpen size={16} /> },
     { to: "/admin/library-ops", label: "LibraryOperations", icon: <LibraryBig size={16} /> },
-    { to: "/admin/reports", label: "Reports", icon: <FileText size={16} /> },
+    // { to: "/admin/reports", label: "Reports", icon: <FileText size={16} /> },
     { to: "/admin/members", label: "MembersManager", icon: <Users size={16} /> },
     { to: "/admin/transactions", label: "AdminTransactionList", icon: <BookCopy size={16} /> },
     { to: "/admin/userview", label: "AdminUserView", icon: <User size={16} /> },
@@ -77,10 +77,9 @@ export default function Sidebar({ collapsed, onClose, user }) {
               key={item.to}
               to={item.to}
               className={`flex items-center gap-2 px-2 py-2 rounded-md text-xs transition-all
-                ${
-                  active
-                    ? "bg-blue-100 text-blue-700 font-semibold shadow-sm"
-                    : "text-gray-700 hover:bg-blue-50 hover:text-blue-600"
+                ${active
+                  ? "bg-blue-100 text-blue-700 font-semibold shadow-sm"
+                  : "text-gray-700 hover:bg-blue-50 hover:text-blue-600"
                 }`}
               onClick={() => {
                 window.scrollTo(0, 0);

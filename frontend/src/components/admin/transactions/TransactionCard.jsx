@@ -32,7 +32,7 @@ export default function TransactionCard({ transaction }) {
         </div>
         <div className="min-w-0">
           <h3 className="font-semibold text-gray-800 truncate">
-            {transaction.bookTitle} <span className="text-xs text-gray-400">({transaction.book_code})</span>
+            {transaction.bookTitle || transaction.book_title || "—"} <span className="text-xs text-gray-400">({transaction.book_code})</span>
           </h3>
           <p className="text-gray-500 text-sm mt-1 flex items-center gap-3">
             <span className={`px-2 py-[2px] rounded-md text-xs font-medium ${style.bg} ${style.color}`}>
