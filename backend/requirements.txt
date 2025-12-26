@@ -1,4 +1,19 @@
+# Core framework
+Django>=4.2
+djangorestframework
+django-cors-headers
+
+# Production server
+gunicorn
+
+# Database
+psycopg2-binary
+
+# Your existing dependencies
 python-barcode==0.14
 Pillow>=10.0
 django-cleanup==6.2.0
 openpyxl>=3.0.0
+
+# Env support
+python-dotenv
