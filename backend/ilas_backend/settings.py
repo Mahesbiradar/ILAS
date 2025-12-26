@@ -261,14 +261,15 @@ LOGGING = {
 # DEFAULT_FILE_STORAGE = "storages.backends.s3boto3.S3Boto3Storage"
 
 # -------------------------------------------------
-# ⚙️ Celery + Redis Configuration
+# ⚙️ Celery + Redis Configuration (OPTIONAL)
 # -------------------------------------------------
- USE_CELERY = os.getenv("USE_CELERY", "False") == "True"
+
+USE_CELERY = os.getenv("USE_CELERY", "False") == "True"
 
 if USE_CELERY:
     from celery.schedules import crontab
- 
- CELERY_BROKER_URL = os.environ.get(
+
+    CELERY_BROKER_URL = os.environ.get(
         "CELERY_BROKER_URL", "redis://127.0.0.1:6379/0"
     )
     CELERY_RESULT_BACKEND = CELERY_BROKER_URL
@@ -279,10 +280,10 @@ if USE_CELERY:
     CELERY_TASK_TRACK_STARTED = True
     CELERY_TASK_TIME_LIMIT = 30 * 60
 
-# ----------------------------------------------------------
-# Celery Beat Schedule (M5 periodic jobs)
-# ----------------------------------------------------------
-CELERY_BEAT_SCHEDULE = {
+    # -------------------------------------------------
+    # Celery Beat Schedule (only when Celery is enabled)
+    # -------------------------------------------------
+    CELERY_BEAT_SCHEDULE = {
         "archive-old-transactions-weekly": {
             "task": "library.tasks.archive_old_transactions",
             "schedule": crontab(day_of_week="sun", hour=1, minute=0),
@@ -292,6 +293,7 @@ CELERY_BEAT_SCHEDULE = {
             "schedule": crontab(day_of_week="sun", hour=2, minute=0),
         },
     }
+
 
 
 SPECTACULAR_SETTINGS = {
