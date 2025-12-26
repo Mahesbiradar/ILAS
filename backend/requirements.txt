@@ -1,25 +1,42 @@
+# -------------------------
 # Core framework
-Django>=4.2
+# -------------------------
+Django==5.2.7
 djangorestframework
 django-cors-headers
+django-filter
+
+# -------------------------
+# Authentication & API
+# -------------------------
 djangorestframework-simplejwt==5.3.1
+drf-spectacular==0.27.2
 
-
+# -------------------------
 # Production server
+# -------------------------
 gunicorn
 
+# -------------------------
 # Database
+# -------------------------
 psycopg2-binary
 
-# Your existing dependencies
+# -------------------------
+# Celery-related apps (installed even if Celery is disabled)
+# -------------------------
+django-celery-results
+django-celery-beat
+
+# -------------------------
+# File handling / utilities
+# -------------------------
 python-barcode==0.14
 Pillow>=10.0
 django-cleanup>=6.0.0
 openpyxl>=3.0.0
 
-# Env support
+# -------------------------
+# Environment support
+# -------------------------
 python-dotenv
-
-drf-spectacular==0.27.2
-djangorestframework
-drf-spectacular==0.27.2
