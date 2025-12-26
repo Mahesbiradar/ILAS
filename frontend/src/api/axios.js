@@ -7,7 +7,11 @@ import axios from "axios";
  * Example in your .env file:
  *   VITE_API_BASE=http://127.0.0.1:8000/api/
  */
-const API_BASE = import.meta.env.VITE_API_BASE || "http://127.0.0.1:8000/api/";
+const API_BASE = import.meta.env.VITE_API_BASE;
+
+if (!API_BASE) {
+  throw new Error("❌ VITE_API_BASE is not defined");
+}
 
 /**
  * ✅ Axios Instance
@@ -16,6 +20,7 @@ const API_BASE = import.meta.env.VITE_API_BASE || "http://127.0.0.1:8000/api/";
 const api = axios.create({
   baseURL: API_BASE,
   headers: { "Content-Type": "application/json" },
+  timeout: 10000, // 10 seconds
   // withCredentials: true, // enable only if using cookie auth
 });
 
@@ -47,10 +52,16 @@ const processQueue = (error, token = null) => {
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
+    /* 🌐 NETWORK / SERVER DOWN ERROR */
+    if (!error.response) {
+      console.error("🌐 Network error or server unreachable");
+      return Promise.reject(error);
+    }
     const originalRequest = error.config;
     if (!originalRequest) return Promise.reject(error);
 
-    // If unauthorized and not retried yet
+    /* 🔐 ACCESS TOKEN EXPIRED (401) */
+
     if (error.response?.status === 401 && !originalRequest._retry) {
       if (isRefreshing) {
         // Wait for ongoing refresh request

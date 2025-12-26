@@ -1,11 +1,15 @@
 import React from "react";
 
 export default function BookCard({ book }) {
-// Normalize backend root (remove trailing slash + remove /api prefix)
-let backend = import.meta.env.VITE_API_BASE || "http://127.0.0.1:8000";
+  // Normalize backend root (remove trailing slash + remove /api prefix)
+  let backend = import.meta.env.VITE_API_BASE;
 
-// Remove /api or /api/ from end
-backend = backend.replace(/\/api\/?$/, "");
+  if (!backend) {
+    throw new Error("❌ VITE_API_BASE is not defined");
+  }
+
+  backend = backend.replace(/\/api\/?$/, "");
+
 
   const isFullUrl = (url) =>
     url?.startsWith("http://") || url?.startsWith("https://");
@@ -48,11 +52,10 @@ backend = backend.replace(/\/api\/?$/, "");
 
         <div className="mt-1">
           <span
-            className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-              status === "AVAILABLE"
-                ? "bg-green-100 text-green-800"
-                : "bg-yellow-100 text-yellow-800"
-            }`}
+            className={`px-2 py-0.5 rounded-full text-xs font-medium ${status === "AVAILABLE"
+              ? "bg-green-100 text-green-800"
+              : "bg-yellow-100 text-yellow-800"
+              }`}
           >
             {status}
           </span>

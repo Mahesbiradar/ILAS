@@ -9,7 +9,7 @@ https://docs.djangoproject.com/en/5.2/topics/settings/
 For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
-
+import os
 from pathlib import Path
 from datetime import timedelta
 
@@ -22,13 +22,14 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-9zs=jqnml2x86k4101x&vy_qr30c9fx#o8eh21%tpg7djyffo6'
+SECRET_KEY = os.environ.get("SECRET_KEY", "unsafe-dev-secret-key")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.environ.get("DEBUG", "False") == "True"
 
-ALLOWED_HOSTS = []
-
+ALLOWED_HOSTS = os.environ.get(
+    "ALLOWED_HOSTS", "localhost,127.0.0.1"
+).split(",")
 
 SECURE_CROSS_ORIGIN_OPENER_POLICY = None
 SECURE_CROSS_ORIGIN_RESOURCE_POLICY = None
@@ -76,9 +77,6 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'corsheaders.middleware.CorsMiddleware',
-    'django.middleware.common.CommonMiddleware',
-
 ]
 
 ROOT_URLCONF = 'ilas_backend.urls'
@@ -138,13 +136,13 @@ WSGI_APPLICATION = 'ilas_backend.wsgi.application'
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'ilas_db',
-        'USER': 'postgres',
-        'PASSWORD': '1Da23et402',
-        'HOST': 'localhost',
-        'PORT': '5432',
+    "default": {
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": os.environ.get("DB_NAME", "ilas_db"),
+        "USER": os.environ.get("DB_USER", "postgres"),
+        "PASSWORD": os.environ.get("DB_PASSWORD", ""),
+        "HOST": os.environ.get("DB_HOST", "localhost"),
+        "PORT": os.environ.get("DB_PORT", "5432"),
     }
 }
 
@@ -192,19 +190,21 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 
 
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:5173",  # React app
-    "http://127.0.0.1:5173",
-]
 
-CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOWED_ORIGINS = os.environ.get(
+    "CORS_ALLOWED_ORIGINS",
+    "http://localhost:5173,http://127.0.0.1:5173"
+).split(",")
+
+
 CORS_ALLOW_CREDENTIALS = True
 
-CORS_ALLOW_HEADERS = ["*"]
-CORS_EXPOSE_HEADERS = ["Content-Type"]
+CORS_ALLOW_HEADERS = ["authorization","content-type",]
 
-
-CORS_EXPOSE_HEADERS = ["Content-Disposition"]  # Enables CSV file download from frontend
+CORS_EXPOSE_HEADERS = [
+    "Content-Type",
+    "Content-Disposition",
+]
 
 # ----------------------------------------------------------
 # 📦 MEDIA FILE CONFIGURATION (for uploaded images & barcodes)
@@ -239,11 +239,11 @@ if ENVIRONMENT == "production":
         EMAIL_PORT = 587
         EMAIL_USE_TLS = True
         EMAIL_HOST_USER = "ilasdrait@gmail.com"
-        EMAIL_HOST_PASSWORD = "vscy wddj apqh vdwk"
+        EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD")
         DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
 
 else:
-    # 🧪 Development mode (no real emails)
+        # 🧪 Development mode (no real emails)
     EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
     DEFAULT_FROM_EMAIL = "noreply@ilas.local"
 
@@ -263,8 +263,10 @@ LOGGING = {
 # -------------------------------------------------
 # ⚙️ Celery + Redis Configuration
 # -------------------------------------------------
-CELERY_BROKER_URL = "redis://127.0.0.1:6379/0"
-CELERY_RESULT_BACKEND = "redis://127.0.0.1:6379/0"
+CELERY_BROKER_URL = os.environ.get(
+    "CELERY_BROKER_URL", "redis://127.0.0.1:6379/0"
+)
+CELERY_RESULT_BACKEND = CELERY_BROKER_URL
 CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
