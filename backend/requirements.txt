@@ -44,3 +44,6 @@ python-dotenv
 dj-database-url
 
 reportlab>=4.0.0
+
+whitenoise>=6.6.0
+
