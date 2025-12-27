@@ -181,6 +181,7 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:5175",
     "http://localhost:5176",
     "http://localhost:5177",
+    "https://ilas.vercel.app",
 
     "https://ilas-production.up.railway.app",
 ]
@@ -321,6 +322,7 @@ ALLOWED_HOSTS = [
     "ilas-production.up.railway.app",
     "localhost",
     "127.0.0.1",
+    "ilas.vercel.app",
 ]
 
 CSRF_TRUSTED_ORIGINS = [
@@ -328,6 +330,7 @@ CSRF_TRUSTED_ORIGINS = [
     "http://localhost:5174",
     "http://localhost:5175",
     "https://ilas-production.up.railway.app",
+    "https://ilas.vercel.app",
 
 ]
 
