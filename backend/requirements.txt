@@ -40,3 +40,5 @@ openpyxl>=3.0.0
 # Environment support
 # -------------------------
 python-dotenv
+
+dj-database-url

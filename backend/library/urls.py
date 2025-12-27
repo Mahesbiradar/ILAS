@@ -143,5 +143,5 @@ urlpatterns = [
     path("api/v1/admin/books/logs/export/", AdminBookLogExportView.as_view(), name="admin-book-log-export"),
 
     ]
-    except Exception as e:
-    print("Barcode URLs not loaded:", e)
+# except Exception as e:
+#     print("Barcode URLs not loaded:", e)

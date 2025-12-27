@@ -56,6 +56,7 @@ INSTALLED_APPS = [
     # Local apps
     'core',
     'library',
+    'library.barcode',
     'accounts',
     'django_celery_results',
     'django_celery_beat',  # optional, for scheduled tasks
@@ -135,16 +136,27 @@ WSGI_APPLICATION = 'ilas_backend.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
+import dj_database_url
+
+
 DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": os.environ.get("DB_NAME", "ilas_db"),
-        "USER": os.environ.get("DB_USER", "postgres"),
-        "PASSWORD": os.environ.get("DB_PASSWORD", ""),
-        "HOST": os.environ.get("DB_HOST", "localhost"),
-        "PORT": os.environ.get("DB_PORT", "5432"),
-    }
+    "default": dj_database_url.config(
+        default=os.getenv("DATABASE_URL"),
+        conn_max_age=600,
+        ssl_require=True,
+    )
 }
+
+# DATABASES = {
+#     "default": {
+#         "ENGINE": "django.db.backends.postgresql",
+#         "NAME": os.environ.get("DB_NAME", "ilas_db"),
+#         "USER": os.environ.get("DB_USER", "postgres"),
+#         "PASSWORD": os.environ.get("DB_PASSWORD", ""),
+#         "HOST": os.environ.get("DB_HOST", "localhost"),
+#         "PORT": os.environ.get("DB_PORT", "5432"),
+#     }
+# }
 
 
 # Password validation
