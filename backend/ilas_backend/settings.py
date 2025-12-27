@@ -175,16 +175,13 @@ USE_TZ = True
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-
-
-
-CORS_ALLOWED_ORIGINS = os.environ.get(
+CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://localhost:5174",
     "http://localhost:5175",
     "https://ilas-production.up.railway.app",
-    "CORS_ALLOWED_ORIGINS",
-).split(",")
+]
+
 
 
 CORS_ALLOW_CREDENTIALS = True
