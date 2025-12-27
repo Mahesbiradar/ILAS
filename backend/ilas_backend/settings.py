@@ -13,6 +13,7 @@ import os
 from pathlib import Path
 from datetime import timedelta
 
+BASE_DIR = Path(__file__).resolve().parent.parent
 
 SECRET_KEY = os.environ.get("SECRET_KEY", "unsafe-dev-secret-key")
 
@@ -134,20 +135,7 @@ DATABASES = {
     )
 }
 
-# DATABASES = {
-#     "default": {
-#         "ENGINE": "django.db.backends.postgresql",
-#         "NAME": os.environ.get("DB_NAME", "ilas_db"),
-#         "USER": os.environ.get("DB_USER", "postgres"),
-#         "PASSWORD": os.environ.get("DB_PASSWORD", ""),
-#         "HOST": os.environ.get("DB_HOST", "localhost"),
-#         "PORT": os.environ.get("DB_PORT", "5432"),
-#     }
-# }
 
-
-# Password validation
-# https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
 
 AUTH_PASSWORD_VALIDATORS = [
     {
@@ -319,10 +307,7 @@ REST_FRAMEWORK.update({
 })
 
 
-
-BASE_DIR = Path(__file__).resolve().parent.parent
-
-STATIC_URL
+STATIC_URL = "/static/"
 
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
