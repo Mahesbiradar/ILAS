@@ -1,12 +1,7 @@
 // src/api/axios.js
 import axios from "axios";
 
-/**
- * ✅ API Base URL
- * Uses .env variable if provided, else defaults to localhost backend.
- * Example in your .env file:
- *   VITE_API_BASE=http://127.0.0.1:8000/api/
- */
+
 const API_BASE = import.meta.env.VITE_API_BASE;
 
 if (!API_BASE) {
