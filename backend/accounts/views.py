@@ -72,6 +72,8 @@ class RegisterView(generics.CreateAPIView):
 class LoginView(APIView):
     permission_classes = [AllowAny]
     authentication_classes = []
+    http_method_names = ["post", "options"]
+
 
     def post(self, request):
         # Accept username or email
