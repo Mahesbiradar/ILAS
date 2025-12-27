@@ -12,10 +12,6 @@ from drf_spectacular.views import (
 )
 
 
-
-
-
-
 urlpatterns = [
     # Admin panel
     path("admin/", admin.site.urls),
@@ -36,8 +32,6 @@ urlpatterns = [
     path("api/schema/swagger-ui/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"),
     path("api/schema/redoc/", SpectacularRedocView.as_view(url_name="schema"), name="redoc"),
 
-
-    
 ]
 
 # ✅ Serve uploaded images, barcodes, and reports during development
