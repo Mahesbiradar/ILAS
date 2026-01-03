@@ -167,6 +167,7 @@ class BookViewSet(viewsets.ModelViewSet):
     # ------------------------
     @action(detail=False, methods=["post"], permission_classes=[IsAdminUser], url_path="bulk-upload")
     def bulk_upload(self, request):
+        import uuid # Local import to ensure availability
         logger.warning("🔥 BULK UPLOAD HIT: request received")
         try:
             excel_file = request.FILES.get("file")
@@ -273,44 +274,119 @@ class BookViewSet(viewsets.ModelViewSet):
             # 4. Processing Loop
             created, failed, errors = 0, 0, []
             
-            # Reset workbook pointer is tricky with openpyxl read_only=True + list conversion
-            # We already converted to list `all_rows`
-            
-            for i, row in enumerate(all_rows, start=2):
-                if not row or all(v in (None, "") for v in row):
-                    continue
+            # --- PATH A: Bulk Create (Excel Only) ---
+            if not images_zip:
+                book_buffer = []
+                BATCH_SIZE = 25
+                
+                logger.warning(f"🚀 Starting optimized bulk insert (Batch Size: {BATCH_SIZE})")
 
-                try:
-                    with transaction.atomic():
+                def flush_buffer(buf):
+                    if not buf: return 0
+                    try:
+                        # 1. Bulk Create (DB Insert)
+                        # We use a temp UUID-based book_code to satisfy unique constraint during insert
+                        objs = Book.objects.bulk_create(buf)
+                        
+                        # 2. Fix Layout (book_code) via Bulk Update
+                        # We need PKs to generate standard book_code
+                        updates = []
+                        for b in objs:
+                            if b.pk:
+                                b.book_code = f"ILAS-ET-{b.pk:04d}"
+                                updates.append(b)
+                        
+                        if updates:
+                            Book.objects.bulk_update(updates, ['book_code'])
+                            
+                        return len(buf)
+                    except Exception as e:
+                        # If batch fails, we lose this chunk. 
+                        # In atomic block, this would rollback. Here we just log.
+                        logger.error(f"❌ Batch insert failed: {e}")
+                        # Ideally we'd re-try one by one, but for speed we fail the chunk
+                        # Or we could just catch and append to failed count
+                        return 0
+
+                for i, row in enumerate(all_rows, start=2):
+                    if not row or all(v in (None, "") for v in row):
+                        continue
+                    
+                    try:
                         data = dict(zip(header, row))
                         serializer = BulkBookImportSerializer(data=data)
                         
                         if serializer.is_valid():
+                            # Instantiate but DO NOT SAVE
                             book = Book(**serializer.validated_data)
                             book.last_modified_by = request.user
                             book._suppress_audit = True
                             
-                            # Clean ISBN for lookup
+                            # Temp unique code to satisfy constraint during insert
+                            book.book_code = uuid.uuid4().hex[:30]
+
+                            # Link Image
                             raw_isbn = book.isbn or ""
                             clean_isbn = raw_isbn.strip().replace("-", "").upper()
+                            if clean_isbn in valid_cloudinary_ids:
+                                book.cover_image = valid_cloudinary_ids[clean_isbn]
                             
-                            # Image Logic
-                            if images_zip:
-                                # Look in ZIP map
-                                # Try ISBN.jpg, Title.jpg
+                            book_buffer.append(book)
+                            
+                            # Flush if full
+                            if len(book_buffer) >= BATCH_SIZE:
+                                count = flush_buffer(book_buffer)
+                                created += count
+                                if count == 0:
+                                    failed += len(book_buffer)
+                                    errors.append({"row": i, "message": "Batch insert failed (check logs)"})
+                                book_buffer = [] # Reset
+                        else:
+                            failed += 1
+                            err_msg = "; ".join([f"{k}: {v[0]}" for k, v in serializer.errors.items()])
+                            errors.append({"row": i, "message": err_msg})
+                    except Exception as row_err:
+                        failed += 1
+                        errors.append({"row": i, "message": str(row_err)[:200]})
+                
+                # Flush remaining
+                if book_buffer:
+                    count = flush_buffer(book_buffer)
+                    created += count
+                    if count == 0:
+                        failed += len(book_buffer)
+                
+            # --- PATH B: Legacy Loop (ZIP + Atomic + Save) ---
+            else:
+                logger.warning("🐌 Legacy slow upload (ZIP mode)")
+                for i, row in enumerate(all_rows, start=2):
+                    if not row: continue
+
+                    try:
+                        with transaction.atomic():
+                            data = dict(zip(header, row))
+                            serializer = BulkBookImportSerializer(data=data)
+                            
+                            if serializer.is_valid():
+                                book = Book(**serializer.validated_data)
+                                book.last_modified_by = request.user
+                                book._suppress_audit = True
+                                
+                                # Image Logic (ZIP)
+                                raw_isbn = book.isbn or ""
+                                clean_isbn = raw_isbn.strip().replace("-", "").upper()
                                 match = None
-                                # normalize keys same as map
                                 keys_to_try = [
                                     f"{raw_isbn.strip().lower()}.jpg",
                                     f"{(book.title or '').strip().lower()}.jpg",
-                                    f"{clean_isbn.lower()}.jpg" # case insensitive match
+                                    f"{clean_isbn.lower()}.jpg"
                                 ]
                                 for k in keys_to_try:
                                     if k in images_map:
                                         match = images_map[k]
                                         break
                                 
-                                # Create book
+                                # Save book (triggers signal for book_code)
                                 book.save()
                                 
                                 if match:
@@ -318,30 +394,22 @@ class BookViewSet(viewsets.ModelViewSet):
                                         fname = f"{book.book_code}.jpg"
                                         book.cover_image.save(fname, ContentFile(match), save=True)
                                     except Exception as img_err:
-                                        # Log but don't fail row
                                         logger.warning(f"Row {i}: Image save failed: {img_err}")
                                         errors.append({"row": i, "message": "Book created, image upload failed"})
+                                
+                                created += 1
                             else:
-                                # Excel Only: Link to existing Cloudinary ID if valid
-                                if clean_isbn in valid_cloudinary_ids:
-                                    book.cover_image = clean_isbn # Assign public_id directly
-                                    # Note: CloudinaryField string assignment assumes public_id
-                                
-                                book.save()
-                                
-                            created += 1
-                        else:
-                            failed += 1
-                            # Format errors
-                            msg = "; ".join([f"{k}: {v[0]}" for k, v in serializer.errors.items()])
-                            errors.append({"row": i, "message": msg})
+                                failed += 1
+                                msg = "; ".join([f"{k}: {v[0]}" for k, v in serializer.errors.items()])
+                                errors.append({"row": i, "message": msg})
 
-                except Exception as row_err:
-                    failed += 1
-                    errors.append({"row": i, "message": str(row_err)[:200]})
-                    logger.error(f"Row {i} fatal: {row_err}")
+                    except Exception as row_err:
+                        failed += 1
+                        errors.append({"row": i, "message": str(row_err)[:200]})
+                        logger.error(f"Row {i} fatal: {row_err}")
 
             # 5. Final Response
+            wb.close()
             create_audit(
                 request.user,
                 AuditLog.ACTION_BULK_UPLOAD,
