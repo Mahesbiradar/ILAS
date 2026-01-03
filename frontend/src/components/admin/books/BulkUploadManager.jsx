@@ -69,7 +69,9 @@ export default function BulkUploadManager({ onUploaded }) {
     } catch (err) {
       console.error("Bulk upload error:", err);
       // Show actual server error if available
-      const msg = err.response?.data?.detail || "Upload failed. Server Error.";
+      const backendErr = err.response?.data?.detail || err.response?.data?.error;
+      console.error("BACKEND RESPONSE:", err.response?.data);
+      const msg = backendErr || "Upload failed. Server Error.";
       toast.error(`❌ ${msg}`);
     } finally {
       setUploading(false);
