@@ -38,11 +38,17 @@ class BookSerializer(serializers.ModelSerializer):
     
     def get_cover_image(self, obj):
         request = self.context.get("request")
+
         if obj.cover_image:
-            if request:
-                return request.build_absolute_uri(obj.cover_image.url)
-            return obj.cover_image.url
-        return None
+            url = obj.cover_image.url
+        else:
+            # Cloudinary default image
+            url = "https://res.cloudinary.com/dlailcpfy/image/upload/defaults/no-cover.png"
+
+        if request:
+            return request.build_absolute_uri(url)
+        return url
+
 
     def validate(self, attrs):
         # Ensure API create has defaults for required fields
@@ -328,8 +334,13 @@ class PublicBookSerializer(serializers.ModelSerializer):
         return obj.issued_to.username if obj.issued_to else None
     def get_cover_image(self, obj):
         request = self.context.get("request")
+
         if obj.cover_image:
-            if request:
-                return request.build_absolute_uri(obj.cover_image.url)
-            return obj.cover_image.url
-        return None
+            url = obj.cover_image.url
+        else:
+            # Cloudinary default image
+            url = "https://res.cloudinary.com/dlailcpfy/image/upload/defaults/no-cover.png"
+
+        if request:
+            return request.build_absolute_uri(url)
+        return url

@@ -12,6 +12,9 @@ from django.core.validators import MinValueValidator
 from django.db import models, transaction
 from django.utils import timezone
 
+from cloudinary.models import CloudinaryField
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -116,7 +119,7 @@ class Book(models.Model):
     cataloger = models.CharField(max_length=128, blank=True, default="", null=True)
     remarks = models.TextField(blank=True, default="", null=True)
 
-    cover_image = models.ImageField(upload_to="book_covers/", null=True, blank=True)
+    cover_image = CloudinaryField("book_cover", blank=True, null=True,)
 
     STATUS_AVAILABLE = "AVAILABLE"
     STATUS_ISSUED = "ISSUED"

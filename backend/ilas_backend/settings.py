@@ -13,6 +13,11 @@ import os
 from pathlib import Path
 from datetime import timedelta
 
+import cloudinary
+import cloudinary.uploader
+import cloudinary.api
+
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 SECRET_KEY = os.environ.get("SECRET_KEY", "unsafe-dev-secret-key")
@@ -21,6 +26,14 @@ DEBUG = os.environ.get("DEBUG", "False") == "True"
 SECURE_CROSS_ORIGIN_OPENER_POLICY = "same-origin"
 SECURE_CROSS_ORIGIN_RESOURCE_POLICY = "same-origin"
 SECURE_REFERRER_POLICY = "same-origin"
+
+
+CLOUDINARY_STORAGE = {
+    "CLOUD_NAME": os.getenv("CLOUDINARY_CLOUD_NAME"),
+    "API_KEY": os.getenv("CLOUDINARY_API_KEY"),
+    "API_SECRET": os.getenv("CLOUDINARY_API_SECRET"),
+}
+
 
 
 # Application definition
@@ -49,6 +62,8 @@ INSTALLED_APPS = [
     'django_celery_beat',  # optional, for scheduled tasks
 
     'django_filters',
+    'cloudinary',
+    'cloudinary_storage',
 
 
 
@@ -200,13 +215,14 @@ CORS_EXPOSE_HEADERS = [
 # ----------------------------------------------------------
 
 MEDIA_URL = '/media/'
-MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+# MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 LIBRARY_BORROW_DAYS_DEFAULT = 14
 LIBRARY_FINE_PER_DAY = "1.00"
 LIBRARY_GRACE_DAYS = 0
 LIBRARY_MAX_FINE = None
 LIBRARY_MAX_ACTIVE_LOANS = 5
-DEFAULT_BOOK_COVER = "defaults/default_book_cover.jpg"  # optional
+DEFAULT_BOOK_COVER = "https://res.cloudinary.com/<dlailcpfy>/image/upload/defaults/no-cover.png"
+DEFAULT_FILE_STORAGE = "cloudinary_storage.storage.MediaCloudinaryStorage"
 
 
 # ================================================================
