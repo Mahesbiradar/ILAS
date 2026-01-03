@@ -7,7 +7,6 @@ import { motion, AnimatePresence } from "framer-motion";
 export default function BulkUploadManager({ onUploaded }) {
   const [show, setShow] = useState(false);
   const [excelFile, setExcelFile] = useState(null);
-  const [zipFile, setZipFile] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [uploadSummary, setUploadSummary] = useState(null);
@@ -25,7 +24,7 @@ export default function BulkUploadManager({ onUploaded }) {
 
     const formData = new FormData();
     formData.append("file", excelFile);
-    if (zipFile) formData.append("images", zipFile);
+    // Images not supported in bulk (Option B)
 
     try {
       setUploading(true);
@@ -39,19 +38,28 @@ export default function BulkUploadManager({ onUploaded }) {
 
       setProgress(100);
 
-      toast.success(`🎉 ${response.created || 0} books uploaded!`);
+      const created = response.created || 0;
+      const failed = response.failed || 0;
+
+      if (failed > 0) {
+        toast.error(`⚠️ Uploaded ${created}, Failed ${failed}`);
+      } else {
+        toast.success(`🎉 All ${created} books uploaded!`);
+      }
+
       setUploadSummary(response);
       onUploaded?.();
 
-      setTimeout(() => {
-        setExcelFile(null);
-        setZipFile(null);
-        setProgress(0);
-        setShow(false);
-      }, 1200);
+      if (failed === 0) {
+        setTimeout(() => {
+          setExcelFile(null);
+          setProgress(0);
+          setShow(false);
+        }, 1500);
+      }
     } catch (err) {
       console.error("Bulk upload error:", err);
-      toast.error("❌ Upload failed. Check Excel format.");
+      toast.error("❌ Upload failed. Server Error.");
     } finally {
       setUploading(false);
     }
@@ -82,7 +90,7 @@ export default function BulkUploadManager({ onUploaded }) {
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
             transition={{ duration: 0.25 }}
-            className="absolute z-50 mt-2 bg-white border border-gray-300 rounded-xl shadow-xl w-80 p-4"
+            className="absolute z-50 mt-2 bg-white border border-gray-300 rounded-xl shadow-xl w-96 p-4"
           >
             <h3 className="text-gray-700 font-semibold text-sm mb-2">
               📤 Upload Books in Bulk
@@ -98,17 +106,9 @@ export default function BulkUploadManager({ onUploaded }) {
                   onChange={(e) => handleFileChange(e, setExcelFile)}
                   className="w-full border rounded-md px-2 py-1 mt-1"
                 />
-              </div>
-
-              {/* ZIP File */}
-              <div>
-                <label className="font-medium text-gray-600">Cover Images ZIP (Optional)</label>
-                <input
-                  type="file"
-                  accept=".zip"
-                  onChange={(e) => handleFileChange(e, setZipFile)}
-                  className="w-full border rounded-md px-2 py-1 mt-1"
-                />
+                <p className="text-gray-400 mt-1 italic">
+                  Note: Bulk upload does not support cover images.
+                </p>
               </div>
 
               {/* Progress Bar */}
@@ -127,17 +127,25 @@ export default function BulkUploadManager({ onUploaded }) {
 
               {/* Summary */}
               {uploadSummary && !uploading && (
-                <div className="bg-green-50 border border-green-200 p-2 rounded-md">
-                  <p className="text-green-700 text-xs">
+                <div className={`p-2 rounded-md border ${uploadSummary.failed > 0 ? "bg-red-50 border-red-200" : "bg-green-50 border-green-200"
+                  }`}>
+                  <p className="text-green-700 font-bold mb-1">
                     ✔ Created: {uploadSummary.created || 0}
                   </p>
-                  <p className="text-gray-700 text-xs">
-                    ➖ Skipped: {uploadSummary.skipped || 0}
-                  </p>
+
                   {uploadSummary.failed > 0 && (
-                    <p className="text-red-600 text-xs">
-                      ⚠ Failed: {uploadSummary.failed}
-                    </p>
+                    <div className="mt-2">
+                      <p className="text-red-600 font-bold">
+                        ⚠ Failed: {uploadSummary.failed}
+                      </p>
+                      <div className="mt-1 h-32 overflow-y-auto bg-white border border-red-100 rounded p-1">
+                        {uploadSummary.errors?.map((err, idx) => (
+                          <div key={idx} className="text-red-500 mb-1 border-b border-gray-50 pb-1">
+                            <span className="font-semibold">Row {err.row}:</span> {err.message}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
                   )}
                 </div>
               )}
@@ -147,11 +155,10 @@ export default function BulkUploadManager({ onUploaded }) {
                 <button
                   onClick={handleUpload}
                   disabled={uploading}
-                  className={`px-3 py-1.5 text-xs text-white rounded-md ${
-                    uploading
+                  className={`px-3 py-1.5 text-xs text-white rounded-md ${uploading
                       ? "bg-gray-400 cursor-not-allowed"
                       : "bg-blue-600 hover:bg-blue-700"
-                  }`}
+                    }`}
                 >
                   {uploading ? "Uploading..." : "⬆ Upload"}
                 </button>

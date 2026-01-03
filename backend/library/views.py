@@ -167,21 +167,9 @@ class BookViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=["post"], permission_classes=[IsAdminUser], url_path="bulk-upload")
     def bulk_upload(self, request):
         excel_file = request.FILES.get("file")
-        images_zip = request.FILES.get("images")
+        # Bulk upload intentionally disables image processing for performance (Option B)
         if not excel_file:
             return Response({"detail": "Excel file is required."}, status=400)
-
-        # Load cover images map
-        images_map = {}
-        if images_zip:
-            try:
-                with zipfile.ZipFile(images_zip) as z:
-                    for name in z.namelist():
-                        base = name.split("/")[-1].lower()
-                        if base.endswith((".jpg", ".jpeg", ".png")):
-                            images_map[base] = z.read(name)
-            except zipfile.BadZipFile:
-                return Response({"detail": "Invalid ZIP file."}, status=400)
 
         # Parse Excel
         try:
@@ -191,41 +179,50 @@ class BookViewSet(viewsets.ModelViewSet):
         except Exception as e:
             return Response({"detail": f"Excel error: {e}"}, status=400)
 
-        created, failed = 0, []
+        created, failed, errors = 0, 0, []
+        
+        # Safe execution loop
         for i, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
             if not row or all(v in (None, "") for v in row):
                 continue
-            data = dict(zip(header, row))
-            serializer = BulkBookImportSerializer(data=data)
+            
             try:
-                serializer.is_valid(raise_exception=True)
-                book = Book(**serializer.validated_data, last_modified_by=request.user)
-                setattr(book, "_suppress_audit", True)
-                book.save()
-                # Attach image
-                for key in [
-                    f"{(book.isbn or '').strip().lower()}.jpg",
-                    f"{(book.title or '').strip().lower()}.jpg",
-                ]:
-                    if key in images_map:
-                        book.cover_image.save(f"{book.book_code}.jpg", ContentFile(images_map[key]), save=True)
-                        break
-                created += 1
-            except Exception as e:
-                logger.warning("Bulk upload row %d failed: %s", i, e)
-                failed.append(f"Row {i}: {str(e)[:200]}")
+                data = dict(zip(header, row))
+                serializer = BulkBookImportSerializer(data=data)
+                
+                if serializer.is_valid():
+                    # Create book safely
+                    book = Book(**serializer.validated_data)
+                    book.last_modified_by = request.user
+                    book._suppress_audit = True
+                    book.cover_image = None  # Explicitly no image for bulk
+                    book.save()
+                    created += 1
+                else:
+                    failed += 1
+                    errors.append({"row": i, "message": str(serializer.errors)})
 
+            except Exception as e:
+                failed += 1
+                errors.append({"row": i, "message": str(e)[:200]})
+
+        # Create single audit log for the batch
         create_audit(
             request.user,
             AuditLog.ACTION_BULK_UPLOAD,
             "Book",
             "BulkImport",
-            new_values={"books_created": created},
-            remarks=f"Bulk uploaded {created} books",
+            new_values={"created": created, "failed": failed},
+            remarks=f"Bulk upload: {created} success, {failed} failed",
             source="admin-ui",
         )
 
-        return Response({"created": created, "failed": len(failed), "errors": failed[:10]}, status=200)
+        # Always return 200 OK with detailed report
+        return Response({
+            "created": created,
+            "failed": failed,
+            "errors": errors[:50]  # Cap error list size
+        }, status=200)
 
     # ------------------------
     # Search API
