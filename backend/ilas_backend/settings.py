@@ -73,8 +73,8 @@ AUTH_USER_MODEL = 'accounts.User'
 
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
-    'whitenoise.middleware.WhiteNoiseMiddleware', 
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware', 
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -200,15 +200,17 @@ else:
     ]
 
 
-CORS_ALLOW_CREDENTIALS = False
+CORS_ALLOW_CREDENTIALS = True
 
-CORS_ALLOW_HEADERS = ["authorization","content-type","accept","origin","x-requested-with",]
+CORS_ALLOW_HEADERS = ["authorization","content-type","accept","origin","x-requested-with", "x-csrftoken","user-agent",]
 
 CORS_EXPOSE_HEADERS = [
     "Content-Type",
     "Content-Disposition",
     "Authorization",
 ]
+
+CORS_ALLOW_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
 
 # ----------------------------------------------------------
 # 📦 MEDIA FILE CONFIGURATION (for uploaded images & barcodes)
