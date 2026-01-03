@@ -18,9 +18,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = os.environ.get("SECRET_KEY", "unsafe-dev-secret-key")
 
 DEBUG = os.environ.get("DEBUG", "False") == "True"
-SECURE_CROSS_ORIGIN_OPENER_POLICY = None
-SECURE_CROSS_ORIGIN_RESOURCE_POLICY = None
-SECURE_REFERRER_POLICY = None
+SECURE_CROSS_ORIGIN_OPENER_POLICY = "same-origin"
+SECURE_CROSS_ORIGIN_RESOURCE_POLICY = "same-origin"
+SECURE_REFERRER_POLICY = "same-origin"
 
 
 # Application definition
@@ -175,17 +175,14 @@ USE_TZ = True
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:5173",
-    "http://localhost:5174",
-    "http://localhost:5175",
-    "http://localhost:5176",
-    "http://localhost:5177",
-    "https://ilas.vercel.app",
-
-    "https://ilas-production.up.railway.app",
-]
-
+if DEBUG:
+    CORS_ALLOWED_ORIGINS = [
+        "http://localhost:5173",
+    ]
+else:
+    CORS_ALLOWED_ORIGINS = [
+        "https://ilas.vercel.app",
+    ]
 
 
 CORS_ALLOW_CREDENTIALS = False
@@ -201,7 +198,6 @@ CORS_EXPOSE_HEADERS = [
 # ----------------------------------------------------------
 # 📦 MEDIA FILE CONFIGURATION (for uploaded images & barcodes)
 # ----------------------------------------------------------
-import os
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
@@ -216,7 +212,6 @@ DEFAULT_BOOK_COVER = "defaults/default_book_cover.jpg"  # optional
 # ================================================================
 # 📧 EMAIL CONFIGURATION (DEV + PROD READY)
 # ================================================================
-import os
 
 # Environment variable to control mode (set this in Railway)
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
@@ -335,5 +330,5 @@ CSRF_TRUSTED_ORIGINS = [
 ]
 
 
-CSRF_COOKIE_SECURE = True
-SESSION_COOKIE_SECURE = True
+CSRF_COOKIE_SECURE = False
+SESSION_COOKIE_SECURE = False
