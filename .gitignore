@@ -22,3 +22,6 @@ dist/
 # Logs
 # =========================
 *.log
+
+db.sqlite3
+media/
