@@ -7,6 +7,7 @@ import { motion, AnimatePresence } from "framer-motion";
 export default function BulkUploadManager({ onUploaded }) {
   const [show, setShow] = useState(false);
   const [excelFile, setExcelFile] = useState(null);
+  const [zipFile, setZipFile] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [uploadSummary, setUploadSummary] = useState(null);
@@ -24,13 +25,20 @@ export default function BulkUploadManager({ onUploaded }) {
 
     const formData = new FormData();
     formData.append("file", excelFile);
-    // Images not supported in bulk (Option B)
+    if (zipFile) formData.append("images", zipFile);
 
     try {
       setUploading(true);
       setProgress(0);
       setUploadSummary(null);
 
+      // Warning user about time
+      if (zipFile) {
+        toast("⏳ Uploading images... this may take a few minutes.", { icon: "🕒", duration: 5000 });
+      }
+
+      // Pass high timeout config implicitly by ensuring backend handles it 
+      // or relying on browser default. Ideally API function allows config injection.
       const response = await bulkUploadBooks(formData, (evt) => {
         const percent = Math.round((evt.loaded / evt.total) * 100);
         setProgress(percent);
@@ -53,13 +61,16 @@ export default function BulkUploadManager({ onUploaded }) {
       if (failed === 0) {
         setTimeout(() => {
           setExcelFile(null);
+          setZipFile(null);
           setProgress(0);
           setShow(false);
         }, 1500);
       }
     } catch (err) {
       console.error("Bulk upload error:", err);
-      toast.error("❌ Upload failed. Server Error.");
+      // Show actual server error if available
+      const msg = err.response?.data?.detail || "Upload failed. Server Error.";
+      toast.error(`❌ ${msg}`);
     } finally {
       setUploading(false);
     }
@@ -106,8 +117,19 @@ export default function BulkUploadManager({ onUploaded }) {
                   onChange={(e) => handleFileChange(e, setExcelFile)}
                   className="w-full border rounded-md px-2 py-1 mt-1"
                 />
+              </div>
+
+              {/* ZIP File */}
+              <div>
+                <label className="font-medium text-gray-600">Cover Images ZIP (Optional)</label>
+                <input
+                  type="file"
+                  accept=".zip"
+                  onChange={(e) => handleFileChange(e, setZipFile)}
+                  className="w-full border rounded-md px-2 py-1 mt-1"
+                />
                 <p className="text-gray-400 mt-1 italic">
-                  Note: Bulk upload does not support cover images.
+                  Images matched by ISBN.jpg or Title.jpg
                 </p>
               </div>
 
@@ -156,8 +178,8 @@ export default function BulkUploadManager({ onUploaded }) {
                   onClick={handleUpload}
                   disabled={uploading}
                   className={`px-3 py-1.5 text-xs text-white rounded-md ${uploading
-                      ? "bg-gray-400 cursor-not-allowed"
-                      : "bg-blue-600 hover:bg-blue-700"
+                    ? "bg-gray-400 cursor-not-allowed"
+                    : "bg-blue-600 hover:bg-blue-700"
                     }`}
                 >
                   {uploading ? "Uploading..." : "⬆ Upload"}

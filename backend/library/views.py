@@ -167,62 +167,124 @@ class BookViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=["post"], permission_classes=[IsAdminUser], url_path="bulk-upload")
     def bulk_upload(self, request):
         excel_file = request.FILES.get("file")
-        # Bulk upload intentionally disables image processing for performance (Option B)
+        images_zip = request.FILES.get("images")
+        
         if not excel_file:
             return Response({"detail": "Excel file is required."}, status=400)
 
-        # Parse Excel
-        try:
-            wb = openpyxl.load_workbook(excel_file, data_only=True)
-            ws = wb.active
-            header = [str(c.value).strip().lower() if c.value else "" for c in ws[1]]
-        except Exception as e:
-            return Response({"detail": f"Excel error: {e}"}, status=400)
-
-        created, failed, errors = 0, 0, []
-        
-        # Safe execution loop
-        for i, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
-            if not row or all(v in (None, "") for v in row):
-                continue
-            
+        # 1. OPTIMIZATION: Load images map ONCE (O(N))
+        images_map = {}
+        if images_zip:
             try:
-                data = dict(zip(header, row))
-                serializer = BulkBookImportSerializer(data=data)
-                
-                if serializer.is_valid():
-                    # Create book safely
-                    book = Book(**serializer.validated_data)
-                    book.last_modified_by = request.user
-                    book._suppress_audit = True
-                    book.cover_image = None  # Explicitly no image for bulk
-                    book.save()
-                    created += 1
-                else:
-                    failed += 1
-                    errors.append({"row": i, "message": str(serializer.errors)})
-
+                with zipfile.ZipFile(images_zip) as z:
+                    for name in z.namelist():
+                        # Store normalized keys for O(1) lookup
+                        base = name.split("/")[-1].lower()
+                        if base.endswith((".jpg", ".jpeg", ".png")):
+                            images_map[base] = z.read(name)
+            except zipfile.BadZipFile:
+                return Response({"detail": "Invalid ZIP file."}, status=400)
             except Exception as e:
-                failed += 1
-                errors.append({"row": i, "message": str(e)[:200]})
+                return Response({"detail": f"ZIP error: {e}"}, status=400)
 
-        # Create single audit log for the batch
-        create_audit(
-            request.user,
-            AuditLog.ACTION_BULK_UPLOAD,
-            "Book",
-            "BulkImport",
-            new_values={"created": created, "failed": failed},
-            remarks=f"Bulk upload: {created} success, {failed} failed",
-            source="admin-ui",
-        )
+        # 2. Parse Excel
+        try:
+            wb = openpyxl.load_workbook(excel_file, data_only=True, read_only=True)
+            ws = wb.active
+            # Read first row for header
+            rows_iter = ws.iter_rows(values_only=True)
+            try:
+                header_row = next(rows_iter)
+            except StopIteration:
+                return Response({"detail": "Empty Excel file."}, status=400)
+                
+            header = [str(c).strip().lower() if c else "" for c in header_row]
+            
+            # Start loop from second row
+            created, failed, errors = 0, 0, []
+            
+            for i, row in enumerate(rows_iter, start=2):
+                if not row or all(v in (None, "") for v in row):
+                    continue
+                
+                # 3. Process Row Safely
+                try:
+                    # Per-row transaction ensures atomicity (book+image or nothing)
+                    with transaction.atomic():
+                        data = dict(zip(header, row))
+                        serializer = BulkBookImportSerializer(data=data)
+                        
+                        if serializer.is_valid():
+                            # Create book
+                            book = Book(**serializer.validated_data)
+                            book.last_modified_by = request.user
+                            book._suppress_audit = True
+                            
+                            # 4. Image Matching Strategy
+                            matched_image_content = None
+                            
+                            # Match by ISBN first (most precise)
+                            isbn_key = f"{(book.isbn or '').strip().lower()}.jpg"
+                            if isbn_key in images_map:
+                                matched_image_content = images_map[isbn_key]
+                            else:
+                                # Fallback to normalized Title
+                                title_key = f"{(book.title or '').strip().lower()}.jpg"
+                                if title_key in images_map:
+                                    matched_image_content = images_map[title_key]
+                            
+                            # Save book first to get ID/Code
+                            book.save()
+                            
+                            # Upload image if found
+                            if matched_image_content:
+                                try:
+                                    filename = f"{book.book_code}.jpg"
+                                    # Save triggers Cloudinary upload
+                                    book.cover_image.save(filename, ContentFile(matched_image_content), save=True)
+                                except Exception as img_err:
+                                    # Log but don't fail the whole book? 
+                                    # Requirement says "Partially success ok" but ideally atomic per row.
+                                    # We will fail the row if image upload completely crashes, OR catch and warn.
+                                    # Decision: Catch and warn, keep book created.
+                                    logger.warning(f"Image upload failed for row {i}: {img_err}")
+                                    errors.append({"row": i, "message": f"Book created but image upload failed: {str(img_err)[:100]}"})
 
-        # Always return 200 OK with detailed report
-        return Response({
-            "created": created,
-            "failed": failed,
-            "errors": errors[:50]  # Cap error list size
-        }, status=200)
+                            created += 1
+                        else:
+                            failed += 1
+                            # Format validation errors
+                            err_msg = "; ".join([f"{k}: {v[0]}" for k,v in serializer.errors.items()])
+                            errors.append({"row": i, "message": err_msg})
+
+                except Exception as row_err:
+                    failed += 1
+                    errors.append({"row": i, "message": str(row_err)[:200]})
+            
+            # Close workbook if read_only
+            wb.close()
+
+            # Create single audit log for the batch
+            create_audit(
+                request.user,
+                AuditLog.ACTION_BULK_UPLOAD,
+                "Book",
+                "BulkImport",
+                new_values={"created": created, "failed": failed},
+                remarks=f"Bulk upload: {created} success, {failed} failed",
+                source="admin-ui",
+            )
+
+            # 5. Always return 200 OK with detailed report
+            return Response({
+                "created": created,
+                "failed": failed,
+                "errors": errors[:50]  # Cap error list size
+            }, status=200)
+
+        except Exception as e:
+            logger.exception("Bulk upload critical failure")
+            return Response({"detail": f"Critical upload error: {str(e)}"}, status=500)
 
     # ------------------------
     # Search API

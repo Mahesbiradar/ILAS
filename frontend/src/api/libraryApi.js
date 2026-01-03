@@ -89,6 +89,7 @@ export async function bulkUploadBooks(formData, onUploadProgress) {
   // backend endpoint: /api/v1/library/books/bulk-upload/
   const res = await api.post(`${LIBRARY}/books/bulk-upload/`, formData, {
     headers: { "Content-Type": "multipart/form-data" },
+    timeout: 600000, // 10 minutes for large ZIP uploads
     ...(onUploadProgress && { onUploadProgress }),
   });
   return res.data;
