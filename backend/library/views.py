@@ -13,7 +13,8 @@ Implements:
 import io
 import csv
 from unicodedata import category
-from venv import logger
+import logging
+logger = logging.getLogger(__name__)
 import zipfile
 import openpyxl
 from datetime import datetime, timezone as dt_timezone
