@@ -14,12 +14,22 @@ export default function BookCard({ book }) {
   const isFullUrl = (url) =>
     url?.startsWith("http://") || url?.startsWith("https://");
 
-  // Correct URL logic
-  const cover = book.cover_image
-    ? isFullUrl(book.cover_image)
-      ? book.cover_image
-      : `${backend}${book.cover_image}`
-    : `${backend}/media/no-cover.png`;
+  // Reliable frontend fallback
+  const PLACEHOLDER_IMG = "/no-cover.png";
+
+  const getCoverUrl = () => {
+    if (book.cover_image) {
+      // If backend sends the legacy local path, ignore it
+      if (book.cover_image.includes("/media/no-cover.png")) return PLACEHOLDER_IMG;
+      
+      return isFullUrl(book.cover_image)
+        ? book.cover_image
+        : `${backend}${book.cover_image}`;
+    }
+    return PLACEHOLDER_IMG;
+  };
+
+  const cover = getCoverUrl();
 
   const title = book.title || "Untitled";
   const author = book.author || "Unknown";
@@ -37,7 +47,7 @@ export default function BookCard({ book }) {
           loading="lazy"
           onError={(e) => {
             e.target.onerror = null;
-            e.target.src = `${backend}/media/no-cover.png`;
+            e.target.src = PLACEHOLDER_IMG;
           }}
         />
       </div>

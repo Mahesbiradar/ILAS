@@ -14,9 +14,6 @@ User = get_user_model()
 class BookSerializer(serializers.ModelSerializer):
     issued_to_name = serializers.ReadOnlyField(source="issued_to.username", default=None)
     last_modified_by_name = serializers.ReadOnlyField(source="last_modified_by.username", default=None)
-    cover_image = serializers.SerializerMethodField()
-
-
     class Meta:
         model = Book
         fields = [
@@ -35,19 +32,15 @@ class BookSerializer(serializers.ModelSerializer):
             "issued_to_name", "last_modified_by_name",
             "created_at", "updated_at",
         ]
-    
-    def get_cover_image(self, obj):
-        request = self.context.get("request")
 
-        if obj.cover_image:
-            url = obj.cover_image.url
-        else:
-            # Cloudinary default image
-            url = "https://res.cloudinary.com/dlailcpfy/image/upload/defaults/no-cover.png"
-
-        if request:
-            return request.build_absolute_uri(url)
-        return url
+    def to_representation(self, instance):
+        ret = super().to_representation(instance)
+        # Inject default image if missing
+        if not ret.get('cover_image'):
+            # Lazy import to avoid circular dependency if any, though usually safe here
+            from django.conf import settings
+            ret['cover_image'] = settings.DEFAULT_BOOK_COVER
+        return ret
 
 
     def validate(self, attrs):
