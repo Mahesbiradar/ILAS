@@ -175,147 +175,193 @@ class BookViewSet(viewsets.ModelViewSet):
                 logger.warning("❌ Missing Excel file")
                 return Response({"detail": "Excel file is required."}, status=400)
 
-            # 1. OPTIMIZATION: Load images map ONCE (O(N))
-            images_map = {}
-            if images_zip:
-                logger.warning(f"🗜️ ZIP received: {images_zip.name}")
-                try:
-                    with zipfile.ZipFile(images_zip) as z:
-                        namelist = z.namelist()
-                        logger.warning(f"🗂️ ZIP file count raw: {len(namelist)}")
-                        for name in namelist:
-                            # Ignore directories and macOS artifacts
-                            if name.endswith("/") or "__MACOSX" in name or "/." in name:
-                                continue
-                            
-                            # Store normalized keys for O(1) lookup
-                            base = name.split("/")[-1].lower().strip()
-                            if base and base.endswith((".jpg", ".jpeg", ".png")):
-                                images_map[base] = z.read(name)
-                        logger.warning(f"🖼️ Image map size: {len(images_map)}")
-                except zipfile.BadZipFile:
-                    logger.error("❌ Invalid ZIP file")
-                    return Response({"detail": "Invalid ZIP file."}, status=400)
-                except Exception as e:
-                    logger.error(f"❌ ZIP extraction error: {e}")
-                    return Response({"detail": f"ZIP error: {e}"}, status=400)
-            else:
-                logger.warning("⚠️ No ZIP file provided")
-
-            # 2. Parse Excel
+            # 1. Parse Excel & Count Rows (Read-Only)
             try:
-                logger.warning(f"📄 Excel received: {excel_file.name}")
+                # data_only=True to get values not formulas
                 wb = openpyxl.load_workbook(excel_file, data_only=True, read_only=True)
                 ws = wb.active
-                logger.warning("📊 Excel workbook loaded")
                 
-                # Read first row for header
+                # Get headers
                 rows_iter = ws.iter_rows(values_only=True)
                 try:
                     header_row = next(rows_iter)
                 except StopIteration:
-                    logger.warning("❌ Empty Excel file")
                     return Response({"detail": "Empty Excel file."}, status=400)
-                    
+                
                 header = [str(c).strip().lower() if c else "" for c in header_row]
-                logger.warning(f"Header: {header[:5]}...")
                 
-                # Start loop from second row
-                created, failed, errors = 0, 0, []
+                # We need to list all rows to count them and process them
+                # Converting generator to list to allow counting + multiple iterations/lookups
+                all_rows = list(rows_iter)
+                row_count = len(all_rows)
+                logger.warning(f"📊 Excel loaded. Rows: {row_count}")
+
+            except Exception as e:
+                logger.error(f"❌ Excel error: {e}")
+                return Response({"detail": f"Excel parsing error: {str(e)}"}, status=400)
+
+            # 2. Limit Check
+            if images_zip and row_count > 20:
+                msg = f"Bulk upload with ZIP images is limited to 20 books (you have {row_count}). Use Excel-only upload for larger datasets."
+                logger.warning(f"❌ Limit exceeded: {msg}")
+                return Response({"error": msg}, status=400)
+
+            # 3. ZIP Extraction (if provided) OR Cloudinary Lookup (if Excel-only)
+            images_map = {}
+            valid_cloudinary_ids = {}
+
+            if images_zip:
+                # Mode B: Excel + ZIP
+                try:
+                    logger.warning("🗜️ Processing ZIP file...")
+                    with zipfile.ZipFile(images_zip) as z:
+                        for name in z.namelist():
+                            if name.endswith("/") or "__MACOSX" in name:
+                                continue
+                            base = name.split("/")[-1].lower().strip()
+                            if base and base.endswith((".jpg", ".jpeg", ".png")):
+                                images_map[base] = z.read(name)
+                    logger.warning(f"🖼️ Loaded {len(images_map)} images from ZIP")
+                except Exception as e:
+                    return Response({"detail": f"Invalid ZIP file: {str(e)}"}, status=400)
+            
+            else:
+                # Mode A: Excel-Only (Scalable)
+                # Optimization: Prefetch Cloudinary IDs for these ISBNs
+                logger.warning("☁️ Excel-only mode: Checking Cloudinary for existing covers...")
+                isbns = []
+                for row in all_rows:
+                    if not row: continue
+                    # Safe mapping
+                    row_data = dict(zip(header, row))
+                    # Assuming 'isbn' is key, handle case sensitivity
+                    isbn_val = row_data.get('isbn')
+                    if isbn_val:
+                        # cleanup isbn
+                        clean_isbn = str(isbn_val).strip().replace("-", "").upper()
+                        if clean_isbn:
+                            isbns.append(clean_isbn)
                 
-                for i, row in enumerate(rows_iter, start=2):
-                    # Progress logging for every 100 rows to avoid spam but track progress
-                    if i % 50 == 0:
-                        logger.warning(f"➡️ Processing row {i}")
-                    
-                    if not row or all(v in (None, "") for v in row):
-                        continue
-                    
-                    # 3. Process Row Safely
+                # Batch check Cloudinary (chunked to be safe)
+                if isbns:
                     try:
-                        # Per-row transaction ensures atomicity (book+image or nothing)
-                        with transaction.atomic():
-                            data = dict(zip(header, row))
-                            serializer = BulkBookImportSerializer(data=data)
+                        import cloudinary.api
+                        # Dedup
+                        isbns = list(set(isbns))
+                        # Check in chunks of 50 to avoid URL length/API limits
+                        chunk_size = 50
+                        for i in range(0, len(isbns), chunk_size):
+                            chunk = isbns[i:i + chunk_size]
+                            try:
+                                # Start with ISBNs as public_ids (we assume public_id=ISBN for covers)
+                                # resources_by_ids returns details for found resources
+                                result = cloudinary.api.resources_by_ids(chunk)
+                                for res in result.get("resources", []):
+                                    pid = res["public_id"]
+                                    valid_cloudinary_ids[pid] = pid
+                                    # Also handle case where ISBN might be part of ID or loosely matched? 
+                                    # For now, strict match on public_id == ISBN
+                            except Exception as chunk_err:
+                                logger.warning(f"⚠️ Cloudinary chunk check failed: {chunk_err}")
+                                # Continue without failing
+                        logger.warning(f"✅ Found {len(valid_cloudinary_ids)} existing covers in Cloudinary")
+                    except Exception as cloud_err:
+                        logger.warning(f"⚠️ Cloudinary lookup skipped: {cloud_err}")
+
+
+            # 4. Processing Loop
+            created, failed, errors = 0, 0, []
+            
+            # Reset workbook pointer is tricky with openpyxl read_only=True + list conversion
+            # We already converted to list `all_rows`
+            
+            for i, row in enumerate(all_rows, start=2):
+                if not row or all(v in (None, "") for v in row):
+                    continue
+
+                try:
+                    with transaction.atomic():
+                        data = dict(zip(header, row))
+                        serializer = BulkBookImportSerializer(data=data)
+                        
+                        if serializer.is_valid():
+                            book = Book(**serializer.validated_data)
+                            book.last_modified_by = request.user
+                            book._suppress_audit = True
                             
-                            if serializer.is_valid():
+                            # Clean ISBN for lookup
+                            raw_isbn = book.isbn or ""
+                            clean_isbn = raw_isbn.strip().replace("-", "").upper()
+                            
+                            # Image Logic
+                            if images_zip:
+                                # Look in ZIP map
+                                # Try ISBN.jpg, Title.jpg
+                                match = None
+                                # normalize keys same as map
+                                keys_to_try = [
+                                    f"{raw_isbn.strip().lower()}.jpg",
+                                    f"{(book.title or '').strip().lower()}.jpg",
+                                    f"{clean_isbn.lower()}.jpg" # case insensitive match
+                                ]
+                                for k in keys_to_try:
+                                    if k in images_map:
+                                        match = images_map[k]
+                                        break
+                                
                                 # Create book
-                                book = Book(**serializer.validated_data)
-                                book.last_modified_by = request.user
-                                book._suppress_audit = True
-                                
-                                # 4. Image Matching Strategy
-                                matched_image_content = None
-                                
-                                # Match by ISBN first (most precise)
-                                isbn_key = f"{(book.isbn or '').strip().lower()}.jpg"
-                                if isbn_key in images_map:
-                                    matched_image_content = images_map[isbn_key]
-                                    # logger.warning(f"✅ Image found for ISBN {book.isbn}")
-                                else:
-                                    # Fallback to normalized Title
-                                    title_key = f"{(book.title or '').strip().lower()}.jpg"
-                                    if title_key in images_map:
-                                        matched_image_content = images_map[title_key]
-                                
-                                # Save book first to get ID/Code
                                 book.save()
                                 
-                                # Upload image if found
-                                if matched_image_content:
+                                if match:
                                     try:
-                                        filename = f"{book.book_code}.jpg"
-                                        # Save triggers Cloudinary upload
-                                        # logger.warning(f"☁️ Uploading image for {book.book_code}")
-                                        book.cover_image.save(filename, ContentFile(matched_image_content), save=True)
-                                        # logger.warning("✅ Cloudinary upload success")
+                                        fname = f"{book.book_code}.jpg"
+                                        book.cover_image.save(fname, ContentFile(match), save=True)
                                     except Exception as img_err:
-                                        logger.warning(f"❌ Image upload failed for row {i}: {img_err}")
-                                        errors.append({"row": i, "message": f"Book created but image upload failed: {str(img_err)[:100]}"})
-
-                                created += 1
+                                        # Log but don't fail row
+                                        logger.warning(f"Row {i}: Image save failed: {img_err}")
+                                        errors.append({"row": i, "message": "Book created, image upload failed"})
                             else:
-                                failed += 1
-                                # Format validation errors
-                                err_msg = "; ".join([f"{k}: {v[0]}" for k,v in serializer.errors.items()])
-                                errors.append({"row": i, "message": err_msg})
+                                # Excel Only: Link to existing Cloudinary ID if valid
+                                if clean_isbn in valid_cloudinary_ids:
+                                    book.cover_image = clean_isbn # Assign public_id directly
+                                    # Note: CloudinaryField string assignment assumes public_id
+                                
+                                book.save()
+                                
+                            created += 1
+                        else:
+                            failed += 1
+                            # Format errors
+                            msg = "; ".join([f"{k}: {v[0]}" for k, v in serializer.errors.items()])
+                            errors.append({"row": i, "message": msg})
 
-                    except Exception as row_err:
-                        failed += 1
-                        logger.error(f"Row {i} crash: {row_err}")
-                        errors.append({"row": i, "message": str(row_err)[:200]})
-                
-                # Close workbook if read_only
-                wb.close()
-                logger.warning(f"✅ Bulk processing complete. Created: {created}, Failed: {failed}")
+                except Exception as row_err:
+                    failed += 1
+                    errors.append({"row": i, "message": str(row_err)[:200]})
+                    logger.error(f"Row {i} fatal: {row_err}")
 
-                # Create single audit log for the batch
-                create_audit(
-                    request.user,
-                    AuditLog.ACTION_BULK_UPLOAD,
-                    "Book",
-                    "BulkImport",
-                    new_values={"created": created, "failed": failed},
-                    remarks=f"Bulk upload: {created} success, {failed} failed",
-                    source="admin-ui",
-                )
-
-                # 5. Always return 200 OK with detailed report
-                return Response({
-                    "created": created,
-                    "failed": failed,
-                    "errors": errors[:50]  # Cap error list size
-                }, status=200)
+            # 5. Final Response
+            create_audit(
+                request.user,
+                AuditLog.ACTION_BULK_UPLOAD,
+                "Book",
+                "BulkImport",
+                new_values={"created": created, "failed": failed},
+                remarks=f"Bulk upload: {created} success, {failed} failed",
+                source="admin-ui",
+            )
             
-            except Exception as excel_err:
-                logger.exception(f"❌ Excel processing critical failure: {excel_err}")
-                return Response({"detail": f"Excel parsing error: {str(excel_err)}"}, status=400)
+            return Response({
+                "created": created,
+                "failed": failed,
+                "errors": errors[:50]
+            }, status=200)
 
         except Exception as e:
             logger.exception("🔥 BULK UPLOAD CRITICAL CRASH")
             return Response(
                 {"error": "Bulk upload failed", "detail": str(e)},
-                status=200 # Return 200 so frontend can display the error message JSON instead of network error
+                status=200 
             )
 
     # ------------------------
