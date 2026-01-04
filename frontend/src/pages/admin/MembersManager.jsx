@@ -166,7 +166,7 @@ export default function MembersManager() {
   ];
 
   return (
-    <div className="w-full px-4 sm:px-6 py-4 overflow-x-hidden">
+    <div className="max-w-7xl mx-auto px-6 py-4">
       <h1 className="text-3xl font-bold mb-6">👥 Members Manager</h1>
 
       {/* Tab Navigation */}
@@ -189,7 +189,7 @@ export default function MembersManager() {
       {activeTab === "members" && (
         <div className="space-y-4">
           {/* Filters */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 bg-gray-50 p-4 rounded-lg">
+          <div className="flex flex-col gap-3 bg-gray-50 p-4 rounded-lg">
             <input
               type="text"
               placeholder="Search by username, email, or ID..."
@@ -241,25 +241,25 @@ export default function MembersManager() {
                 />
 
                 {/* Pagination Controls */}
-                <div className="flex flex-col md:flex-row justify-between items-center mt-6 p-4 bg-gray-50 rounded-lg gap-4">
-                  <div className="text-sm text-gray-600 w-full md:w-auto text-center md:text-left">
+                <div className="flex justify-between items-center mt-6 p-4 bg-gray-50 rounded-lg">
+                  <div className="text-sm text-gray-600">
                     Showing {members.length} of {pagination.count} members
                   </div>
-                  <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto">
+                  <div className="flex gap-2">
                     <button
                       onClick={() => pagination.goToPreviousPage()}
                       disabled={pagination.page === 1}
-                      className="w-full sm:w-auto px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                      className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       ← Previous
                     </button>
-                    <div className="px-4 py-2 text-sm font-medium flex items-center justify-center">
+                    <div className="px-4 py-2 text-sm font-medium">
                       Page {pagination.page} of {pagination.totalPages || 1}
                     </div>
                     <button
                       onClick={() => pagination.goToNextPage()}
                       disabled={pagination.page >= pagination.totalPages}
-                      className="w-full sm:w-auto px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                      className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       Next →
                     </button>
