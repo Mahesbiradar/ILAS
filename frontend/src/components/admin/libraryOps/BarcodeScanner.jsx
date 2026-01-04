@@ -2,60 +2,84 @@
 import React, { useEffect, useRef, useState } from "react";
 import { BrowserMultiFormatReader } from "@zxing/browser";
 
-const BarcodeScanner = ({ onDetected, previewWidth = 300, previewHeight = 200 }) => {
+const BarcodeScanner = ({ onDetected, deviceId, previewWidth = 300, previewHeight = 200 }) => {
   const videoRef = useRef(null);
   const [error, setError] = useState(null);
-  const [active, setActive] = useState(true);
+  const codeReader = useRef(new BrowserMultiFormatReader());
+  const controlsRef = useRef(null);
+
+  // Helper to stop all video tracks
+  const stopMediaStream = () => {
+    if (controlsRef.current) {
+      controlsRef.current.stop();
+      controlsRef.current = null;
+    }
+
+    if (videoRef.current && videoRef.current.srcObject) {
+      const tracks = videoRef.current.srcObject.getTracks();
+      tracks.forEach(track => track.stop());
+      videoRef.current.srcObject = null;
+    }
+  };
 
   useEffect(() => {
     let mounted = true;
-    let codeReader = null;
 
-    const start = async () => {
+    const startDecoding = async () => {
+      stopMediaStream(); // Ensure any previous stream is closed
+
       try {
-        if (!navigator?.mediaDevices?.getUserMedia) {
-          throw new Error("Camera not supported.");
+        const videoInputDevices = await BrowserMultiFormatReader.listVideoInputDevices();
+
+        let selectedDeviceId = deviceId;
+        if (!selectedDeviceId && videoInputDevices.length > 0) {
+          // If no specific device requested, try to find the "back" camera on mobile
+          const backCamera = videoInputDevices.find(device =>
+            device.label.toLowerCase().includes('back') ||
+            device.label.toLowerCase().includes('rear')
+          );
+          selectedDeviceId = backCamera ? backCamera.deviceId : videoInputDevices[0].deviceId;
         }
 
-        codeReader = new BrowserMultiFormatReader();
-        const devices = await BrowserMultiFormatReader.listVideoInputDevices();
+        if (!selectedDeviceId) {
+          throw new Error("No camera found");
+        }
 
-        if (!devices || devices.length === 0) throw new Error("No camera found.");
-
-        const deviceId = devices[0].deviceId;
-        if (!videoRef.current) return;
-
-        codeReader.decodeFromVideoDevice(deviceId, videoRef.current, (result, err) => {
-          if (!mounted) return;
-
-          if (result) {
-            try { codeReader.reset(); } catch {}
-            setActive(false);
-            onDetected(result.getText());
-          }
-
-          if (err && err.name !== "NotFoundException") {
-            console.warn(err);
-          }
-        });
-      } catch (e) {
         if (!mounted) return;
-        setError(e.message || "Camera unavailable");
+
+        // Start decoding from the specific device
+        controlsRef.current = await codeReader.current.decodeFromVideoDevice(
+          selectedDeviceId,
+          videoRef.current,
+          (result, err) => {
+            if (!mounted) return;
+            if (result) {
+              stopMediaStream(); // Stop immediately on detection
+              onDetected(result.getText());
+            }
+          }
+        );
+
+      } catch (err) {
+        if (mounted) {
+          console.error(err);
+          setError("Camera error: " + (err.message || "Unknown error"));
+        }
       }
     };
 
-    if (active) start();
+    startDecoding();
 
     return () => {
       mounted = false;
-      try { codeReader && codeReader.reset(); } catch {}
+      stopMediaStream();
     };
-  }, [active, onDetected]);
+  }, [deviceId, onDetected]);
 
   return (
     <div className="flex flex-col items-center">
       {error ? (
-        <div className="text-sm text-red-500">{error}</div>
+        <div className="text-sm text-red-500 p-4">{error}</div>
       ) : (
         <video
           ref={videoRef}
@@ -66,6 +90,7 @@ const BarcodeScanner = ({ onDetected, previewWidth = 300, previewHeight = 200 })
             borderRadius: '12px',
             boxShadow: '0 2px 6px rgba(0,0,0,0.15)',
           }}
+          muted
         />
       )}
     </div>
