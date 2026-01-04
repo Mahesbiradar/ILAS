@@ -327,32 +327,30 @@ class BulkBookImportSerializer(serializers.Serializer):
 # ----------------------------------------------------------------------
 class PublicBookSerializer(serializers.ModelSerializer):
     issued_to_name = serializers.SerializerMethodField()
-    cover_image = serializers.SerializerMethodField()
+    cover_url = serializers.SerializerMethodField()
 
 
     class Meta:
         model = Book
         fields = [
             "id", "book_code", "title", "author", "isbn", "category",
-            "status", "shelf_location", "issued_to_name","cover_image",
+            "status", "shelf_location", "issued_to_name","cover_url",
         ]
 
     def get_issued_to_name(self, obj):
         return obj.issued_to.username if obj.issued_to else None
-    def get_cover_image(self, obj):
-        # 1. Single book upload (already stored in DB)
+    def get_cover_url(self, obj):
+        # 1. Preserve single book uploads
         if obj.cover_image:
             try:
-                request = self.context.get("request")
-                url = obj.cover_image.url
-                return request.build_absolute_uri(url) if request else url
+                return obj.cover_image.url
             except Exception:
                 pass
 
-        # 2. Bulk upload (resolve via ISBN)
+        # 2. Resolve bulk-uploaded books via ISBN
         if obj.isbn:
             isbn = obj.isbn.replace("-", "").strip()
             return f"{settings.CLOUDINARY_BOOK_COVER_BASE}/{isbn}.jpg"
 
-        # 3. Final fallback
+        # 3. Fallback to default cover
         return settings.DEFAULT_BOOK_COVER
