@@ -29,68 +29,70 @@ export default function MemberLogs({ logs = [], onRefresh }) {
     <div className="w-full">
       {/* ---------- DESKTOP TABLE (md:block) ---------- */}
       <div className="hidden md:block bg-white rounded-lg border border-gray-200 overflow-x-auto">
-        <table className="w-full table-auto text-xs">
-          <thead className="bg-gray-50 text-gray-600 border-b">
-            <tr>
-              <th className="px-2 py-2 min-w-[90px] text-left">Action</th>
-              <th className="px-2 py-2 min-w-[140px] text-left">Username</th>
-              <th className="px-2 py-2 min-w-[220px] text-left">Email</th>
-              <th className="px-2 py-2 min-w-[100px] text-left">Role</th>
-              <th className="px-2 py-2 min-w-[140px] text-left">Performed By</th>
-              <th className="px-2 py-2 min-w-[170px] text-left">Timestamp</th>
-            </tr>
-          </thead>
+        <div className="min-w-[1000px]">
+          <table className="w-full table-auto text-xs">
+            <thead className="bg-gray-50 text-gray-600 border-b">
+              <tr>
+                <th className="px-2 py-2 min-w-[90px] text-left">Action</th>
+                <th className="px-2 py-2 min-w-[140px] text-left">Username</th>
+                <th className="px-2 py-2 min-w-[220px] text-left">Email</th>
+                <th className="px-2 py-2 min-w-[100px] text-left">Role</th>
+                <th className="px-2 py-2 min-w-[140px] text-left">Performed By</th>
+                <th className="px-2 py-2 min-w-[170px] text-left">Timestamp</th>
+              </tr>
+            </thead>
 
-          <tbody>
-            {logs.length ? (
-              logs.map((log, idx) => (
-                <tr
-                  key={idx}
-                  className="border-t border-gray-100 hover:bg-gray-50"
-                >
-                  <td className="px-2 py-1">
-                    <span
-                      className={`px-2 py-[2px] rounded-full text-[10px] font-medium ${badgeClass(
-                        log.action
-                      )}`}
-                    >
-                      {log.action}
-                    </span>
-                  </td>
+            <tbody>
+              {logs.length ? (
+                logs.map((log, idx) => (
+                  <tr
+                    key={idx}
+                    className="border-t border-gray-100 hover:bg-gray-50"
+                  >
+                    <td className="px-2 py-1">
+                      <span
+                        className={`px-2 py-[2px] rounded-full text-[10px] font-medium ${badgeClass(
+                          log.action
+                        )}`}
+                      >
+                        {log.action}
+                      </span>
+                    </td>
 
-                  <td className="px-2 py-1 truncate">
-                    {log.username || "-"}
-                  </td>
+                    <td className="px-2 py-1 truncate">
+                      {log.username || "-"}
+                    </td>
 
-                  <td className="px-2 py-1 truncate">
-                    {log.email || "-"}
-                  </td>
+                    <td className="px-2 py-1 truncate">
+                      {log.email || "-"}
+                    </td>
 
-                  <td className="px-2 py-1 capitalize">
-                    {log.role || "-"}
-                  </td>
+                    <td className="px-2 py-1 capitalize">
+                      {log.role || "-"}
+                    </td>
 
-                  <td className="px-2 py-1 truncate">
-                    {log.performed_by || "-"}
-                  </td>
+                    <td className="px-2 py-1 truncate">
+                      {log.performed_by || "-"}
+                    </td>
 
-                  <td className="px-2 py-1 text-gray-500">
-                    {formatTime(log.timestamp)}
+                    <td className="px-2 py-1 text-gray-500">
+                      {formatTime(log.timestamp)}
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td
+                    colSpan={6}
+                    className="px-4 py-6 text-center text-gray-500"
+                  >
+                    No activity logs available.
                   </td>
                 </tr>
-              ))
-            ) : (
-              <tr>
-                <td
-                  colSpan={6}
-                  className="px-4 py-6 text-center text-gray-500"
-                >
-                  No activity logs available.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* ---------- MOBILE CARDS (md:hidden) ---------- */}

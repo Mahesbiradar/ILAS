@@ -47,7 +47,7 @@ export default function MainLayout() {
       )}
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col relative min-h-0">
+      <div className="flex-1 flex flex-col relative min-w-0">
         {/* Header */}
         <Header onToggleSidebar={() => setSidebarOpen((s) => !s)} />
 
