@@ -28,7 +28,7 @@ export default function Header({ onToggleSidebar }) {
 
   return (
     <header className="bg-white fixed top-0 left-0 right-0 z-20 shadow-[0_2px_8px_rgba(0,0,0,0.05)]">
-      <div className="flex items-center justify-between px-6 h-[56px]">
+      <div className="flex items-center justify-between px-6 h-[72px] md:h-[56px]">
         {/* Sidebar Toggle (Mobile Only) */}
         <button
           onClick={onToggleSidebar}

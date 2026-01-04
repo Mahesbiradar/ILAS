@@ -53,7 +53,7 @@ export default function MainLayout() {
 
         {/* Page Body */}
         <main
-          className="flex-1 overflow-y-auto px-6 py-8 mt-[75px] bg-gray-50"
+          className="flex-1 overflow-y-auto px-6 py-8 mt-[72px] md:mt-[56px] bg-gray-50"
           style={{
             boxShadow: "inset 0px 1px 3px rgba(0,0,0,0.05)",
           }}
