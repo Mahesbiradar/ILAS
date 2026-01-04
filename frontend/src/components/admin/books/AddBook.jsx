@@ -32,9 +32,9 @@ export default function AddBook({ onClose, onAdded }) {
   });
 
   const categories = [
-    "Electronics", "Telecommunication", "Embedded Systems", "Programming", "C & C++",
-    "Python", "Engineering Mathematics", "Signal Processing", "Networking",
-    "Microcontrollers", "IoT", "Project Management", "Machine Learning", "Digital Design",
+    "Electronics & Electrical Engineering", "Communication Engineering", "Other", "Signal & Image Processing", "VLSI & Semiconductor", "Embedded Systems",
+    "Computer Programming & Software", "Networking", "Control Systems", "Security", "Mathematics", "Mechanical Engineering", "Power & Energy Systems",
+    "Management & Business", "Physics", "Personal Development",
   ];
 
   const [coverImage, setCoverImage] = useState(null);
