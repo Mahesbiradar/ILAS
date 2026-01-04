@@ -107,6 +107,20 @@ export const lookupBookByCode = async (bookCode) => {
       status: data.status,
       issued_to: data.issued_to,
       due_date: data.due_date,
+
+      // Missing fields required by ScanResultCard
+      publisher: data.publisher,
+      edition: data.edition,
+      language: data.language,
+      publication_year: data.publication_year || data.published_year,
+      accession_no: data.accession_no || data.accession_number,
+      source: data.source,
+      condition: data.condition || data.book_condition,
+      book_cost: data.book_cost || data.price || data.cost,
+
+      description: data.description,
+      remarks: data.remarks,
+
       raw: data,
     };
   } catch (err) {
