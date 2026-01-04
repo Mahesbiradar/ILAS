@@ -28,7 +28,7 @@ export default function Header({ onToggleSidebar }) {
 
   return (
     <header className="bg-white fixed top-0 left-0 right-0 z-20 shadow-[0_2px_8px_rgba(0,0,0,0.05)]">
-      <div className="flex items-center justify-between px-6 h-[72px] md:h-[56px]">
+      <div className="flex items-center justify-between px-4 md:px-6 h-[88px] md:h-[56px]">
         {/* Sidebar Toggle (Mobile Only) */}
         <button
           onClick={onToggleSidebar}
@@ -39,11 +39,11 @@ export default function Header({ onToggleSidebar }) {
         </button>
 
         {/* Centered Header Title */}
-        <div className="flex-1 flex flex-col items-center justify-center">
-          <h1 className="text-blue-700 font-semibold text-lg text-center leading-tight">
+        <div className="flex-1 flex flex-col items-center justify-center px-2">
+          <h1 className="text-blue-700 font-semibold text-sm sm:text-base md:text-lg text-center leading-tight">
             Innovative Library Automation System
           </h1>
-          <p className="text-xs text-gray-500 text-center">
+          <p className="text-[10px] sm:text-xs text-gray-500 text-center leading-tight mt-0.5">
             Dr. Ambedkar Institute of Technology, Bangalore
           </p>
         </div>
