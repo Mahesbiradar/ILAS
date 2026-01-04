@@ -13,19 +13,19 @@ export default function MemberTable({ members, onEdit, onDelete, onPromote }) {
     <div className="w-full">
       {/* ---------- DESKTOP TABLE (md:block) ---------- */}
       <div className="hidden md:block overflow-x-auto">
-        <table className="w-full table-fixed bg-white rounded-lg text-xs border border-gray-200">
+        <table className="w-full table-auto bg-white rounded-lg text-xs border border-gray-200">
           <thead className="bg-gray-50 text-gray-600">
             <tr>
-              <th className="px-2 py-2 w-[140px] text-left">First Name</th>
-              <th className="px-2 py-2 w-[120px] text-left">Username</th>
-              <th className="px-2 py-2 w-[200px] text-left">Email</th>
-              <th className="px-2 py-2 w-[120px] text-left">Phone</th>
-              <th className="px-2 py-2 w-[130px] text-left">USN / ID</th>
-              <th className="px-2 py-2 w-[90px] text-left">Role</th>
-              <th className="px-2 py-2 w-[70px] text-left">Dept</th>
-              <th className="px-2 py-2 w-[60px] text-left">Year</th>
-              <th className="px-2 py-2 w-[90px] text-left">Status</th>
-              <th className="px-2 py-2 w-[160px] text-center">Actions</th>
+              <th className="px-2 py-2 min-w-[140px] text-left">First Name</th>
+              <th className="px-2 py-2 min-w-[120px] text-left">Username</th>
+              <th className="px-2 py-2 min-w-[200px] text-left">Email</th>
+              <th className="px-2 py-2 min-w-[120px] text-left">Phone</th>
+              <th className="px-2 py-2 min-w-[130px] text-left">USN / ID</th>
+              <th className="px-2 py-2 min-w-[90px] text-left">Role</th>
+              <th className="px-2 py-2 min-w-[70px] text-left">Dept</th>
+              <th className="px-2 py-2 min-w-[60px] text-left">Year</th>
+              <th className="px-2 py-2 min-w-[90px] text-left">Status</th>
+              <th className="px-2 py-2 min-w-[160px] text-center">Actions</th>
             </tr>
           </thead>
           <tbody>
