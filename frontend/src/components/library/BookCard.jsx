@@ -1,35 +1,8 @@
 import React from "react";
 
 export default function BookCard({ book }) {
-  // Normalize backend root (remove trailing slash + remove /api prefix)
-  let backend = import.meta.env.VITE_API_BASE;
-
-  if (!backend) {
-    throw new Error("❌ VITE_API_BASE is not defined");
-  }
-
-  backend = backend.replace(/\/api\/?$/, "");
-
-
-  const isFullUrl = (url) =>
-    url?.startsWith("http://") || url?.startsWith("https://");
-
-  // Reliable frontend fallback
-  const PLACEHOLDER_IMG = "/no-cover.png";
-
-  const getCoverUrl = () => {
-    if (book.cover_image) {
-      // If backend sends the legacy local path, ignore it
-      if (book.cover_image.includes("/media/no-cover.png")) return PLACEHOLDER_IMG;
-      
-      return isFullUrl(book.cover_image)
-        ? book.cover_image
-        : `${backend}${book.cover_image}`;
-    }
-    return PLACEHOLDER_IMG;
-  };
-
-  const cover = getCoverUrl();
+  const DEFAULT_COVER =
+    "https://res.cloudinary.com/dlailcpfy/image/upload/v1767505899/no_cover.jpg";
 
   const title = book.title || "Untitled";
   const author = book.author || "Unknown";
@@ -41,13 +14,13 @@ export default function BookCard({ book }) {
     <div className="w-full h-[360px] bg-white rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-all p-3 flex flex-col">
       <div className="w-full h-44 rounded-md overflow-hidden bg-gray-50 mb-3">
         <img
-          src={cover}
+          src={book.cover_url || DEFAULT_COVER}
           alt={title}
           className="w-full h-full object-contain"
           loading="lazy"
           onError={(e) => {
             e.target.onerror = null;
-            e.target.src = PLACEHOLDER_IMG;
+            e.target.src = DEFAULT_COVER;
           }}
         />
       </div>

@@ -7,6 +7,7 @@ from rest_framework import serializers
 
 from .models import Book, BookTransaction, AuditLog
 from django.contrib.auth import get_user_model
+from django.conf import settings
 from rest_framework.exceptions import ValidationError as DRFValidationError
 User = get_user_model()
 
@@ -14,6 +15,8 @@ User = get_user_model()
 class BookSerializer(serializers.ModelSerializer):
     issued_to_name = serializers.ReadOnlyField(source="issued_to.username", default=None)
     last_modified_by_name = serializers.ReadOnlyField(source="last_modified_by.username", default=None)
+    cover_url = serializers.SerializerMethodField()
+
     class Meta:
         model = Book
         fields = [
@@ -22,7 +25,7 @@ class BookSerializer(serializers.ModelSerializer):
             "isbn", "language", "category", "keywords", "description",
             "accession_no", "shelf_location", "condition", "book_cost",
             "vendor_name", "source", "library_section", "dewey_decimal",
-            "cataloger", "remarks", "cover_image",
+            "cataloger", "remarks", "cover_image", "cover_url",
             "status", "issued_to", "issued_to_name",
             "last_modified_by", "last_modified_by_name",
             "created_at", "updated_at", "is_active",
@@ -35,12 +38,23 @@ class BookSerializer(serializers.ModelSerializer):
 
     def to_representation(self, instance):
         ret = super().to_representation(instance)
-        # Inject default image if missing
-        if not ret.get('cover_image'):
-            # Lazy import to avoid circular dependency if any, though usually safe here
-            from django.conf import settings
-            ret['cover_image'] = settings.DEFAULT_BOOK_COVER
         return ret
+
+    def get_cover_url(self, obj):
+        # 1. Single book upload (already stored in DB)
+        if obj.cover_image:
+            try:
+                return obj.cover_image.url
+            except Exception:
+                pass
+
+        # 2. Bulk upload (resolve via ISBN)
+        if obj.isbn:
+            isbn = obj.isbn.replace("-", "").strip()
+            return f"{settings.CLOUDINARY_BOOK_COVER_BASE}/{isbn}.jpg"
+
+        # 3. Final fallback
+        return settings.DEFAULT_BOOK_COVER
 
 
     def validate(self, attrs):
@@ -326,14 +340,19 @@ class PublicBookSerializer(serializers.ModelSerializer):
     def get_issued_to_name(self, obj):
         return obj.issued_to.username if obj.issued_to else None
     def get_cover_image(self, obj):
-        request = self.context.get("request")
-
+        # 1. Single book upload (already stored in DB)
         if obj.cover_image:
-            url = obj.cover_image.url
-        else:
-            # Cloudinary default image
-            url = "https://res.cloudinary.com/dlailcpfy/image/upload/defaults/no-cover.png"
+            try:
+                request = self.context.get("request")
+                url = obj.cover_image.url
+                return request.build_absolute_uri(url) if request else url
+            except Exception:
+                pass
 
-        if request:
-            return request.build_absolute_uri(url)
-        return url
+        # 2. Bulk upload (resolve via ISBN)
+        if obj.isbn:
+            isbn = obj.isbn.replace("-", "").strip()
+            return f"{settings.CLOUDINARY_BOOK_COVER_BASE}/{isbn}.jpg"
+
+        # 3. Final fallback
+        return settings.DEFAULT_BOOK_COVER

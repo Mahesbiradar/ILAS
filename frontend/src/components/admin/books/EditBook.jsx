@@ -17,7 +17,7 @@ export default function EditBook({ book, onSubmit, onClose }) {
   useEffect(() => {
     if (book) {
       setForm(book);
-      setPreview(book.cover_image || null);
+      setPreview(book.cover_url || book.cover_image || null);
     }
   }, [book]);
 

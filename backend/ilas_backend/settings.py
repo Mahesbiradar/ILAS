@@ -223,7 +223,8 @@ LIBRARY_FINE_PER_DAY = "1.00"
 LIBRARY_GRACE_DAYS = 0
 LIBRARY_MAX_FINE = None
 LIBRARY_MAX_ACTIVE_LOANS = 5
-DEFAULT_BOOK_COVER = "https://res.cloudinary.com/dlailcpfy/image/upload/v1767422496/no-cover_f1rzha.jpg"
+DEFAULT_BOOK_COVER = "https://res.cloudinary.com/dlailcpfy/image/upload/v1767505899/no_cover.jpg"
+CLOUDINARY_BOOK_COVER_BASE = "https://res.cloudinary.com/dlailcpfy/image/upload/v1767503353/ilas/book_covers"
 DEFAULT_FILE_STORAGE = "cloudinary_storage.storage.MediaCloudinaryStorage"
 
 
