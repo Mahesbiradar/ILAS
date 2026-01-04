@@ -27,29 +27,30 @@ export default function Header({ onToggleSidebar }) {
   }, []);
 
   return (
-    <header className="bg-white fixed top-0 left-0 right-0 z-20 shadow-[0_2px_8px_rgba(0,0,0,0.05)]">
-      <div className="flex items-center justify-between px-6 h-[56px]">
-        {/* Sidebar Toggle (Mobile Only) */}
+    <header className="fixed top-0 inset-x-0 z-40 h-14 bg-white border-b border-gray-100">
+      <div className="flex items-center justify-between h-full px-4 md:px-6">
+
+        {/* Sidebar Toggle (Mobile) */}
         <button
           onClick={onToggleSidebar}
-          className="p-2 rounded-md hover:bg-gray-100 md:hidden"
-          aria-label="Toggle sidebar"
+          className="md:hidden p-2 rounded-md hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          aria-label="Open sidebar"
         >
           <Menu size={20} />
         </button>
 
-        {/* Centered Header Title */}
-        <div className="flex-1 flex flex-col items-center justify-center">
-          <h1 className="text-blue-700 font-semibold text-lg text-center leading-tight">
-            Innovative Library Automation System
+        {/* Title */}
+        <div className="flex-1 text-center px-2">
+          <h1 className="text-sm md:text-base font-semibold text-blue-700 truncate">
+            ILAS — Innovative Library Automation System
           </h1>
-          <p className="text-xs text-gray-500 text-center">
+          <p className="hidden md:block text-xs text-gray-500">
             Dr. Ambedkar Institute of Technology, Bangalore
           </p>
         </div>
 
-        {/* Right Side - Notifications and User Menu */}
-        <div className="flex items-center gap-4 relative" ref={menuRef}>
+        {/* Right actions */}
+        <div className="flex items-center gap-3 relative" ref={menuRef}>
           <button
             className="p-2 rounded-md hover:bg-gray-100"
             aria-label="Notifications"
@@ -57,29 +58,27 @@ export default function Header({ onToggleSidebar }) {
             <Bell size={18} />
           </button>
 
-          {/* User Avatar */}
+          {/* User avatar */}
           <button
-            onClick={() => setOpenMenu(!openMenu)}
-            className="flex items-center gap-2 p-1 rounded-md hover:bg-gray-100"
+            onClick={() => setOpenMenu((s) => !s)}
+            className="flex items-center gap-2 p-1 rounded-md hover:bg-gray-100 focus:outline-none"
+            aria-haspopup="true"
+            aria-expanded={openMenu}
           >
             <div className="h-9 w-9 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-semibold">
               {user?.username?.charAt(0)?.toUpperCase() || "U"}
             </div>
-            <div className="hidden md:block text-left">
-              <div className="text-sm font-medium">{user?.username || "Guest"}</div>
-              <div className="text-xs text-gray-500 uppercase">{user?.role || "visitor"}</div>
-            </div>
           </button>
 
-          {/* Dropdown Menu */}
+          {/* Dropdown */}
           <AnimatePresence>
             {openMenu && (
               <motion.div
-                initial={{ opacity: 0, y: -6 }}
+                initial={{ opacity: 0, y: -8 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -6 }}
+                exit={{ opacity: 0, y: -8 }}
                 transition={{ duration: 0.2 }}
-                className="absolute top-full right-1/2 translate-x-1/2 mt-3 w-44 bg-white rounded-lg shadow-md border border-gray-100 py-2 text-sm"
+                className="absolute right-0 top-full mt-3 w-44 bg-white rounded-lg shadow-lg border border-gray-100 py-2 text-sm"
               >
                 <button
                   onClick={() => {
