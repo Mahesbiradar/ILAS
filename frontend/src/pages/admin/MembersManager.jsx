@@ -166,7 +166,7 @@ export default function MembersManager() {
   ];
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 overflow-x-hidden">
+    <div className="w-full px-4 sm:px-6 py-4 overflow-x-hidden">
       <h1 className="text-3xl font-bold mb-6">👥 Members Manager</h1>
 
       {/* Tab Navigation */}
