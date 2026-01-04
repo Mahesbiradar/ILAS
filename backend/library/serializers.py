@@ -50,7 +50,7 @@ class BookSerializer(serializers.ModelSerializer):
 
         # 2. Bulk upload (resolve via ISBN)
         if obj.isbn:
-            isbn = obj.isbn.replace("-", "").strip()
+            isbn = obj.isbn.strip()
             return f"{settings.CLOUDINARY_BOOK_COVER_BASE}/{isbn}.jpg"
 
         # 3. Final fallback
@@ -349,7 +349,7 @@ class PublicBookSerializer(serializers.ModelSerializer):
 
         # 2. Resolve bulk-uploaded books via ISBN
         if obj.isbn:
-            isbn = obj.isbn.replace("-", "").strip()
+            isbn = obj.isbn.strip()
             return f"{settings.CLOUDINARY_BOOK_COVER_BASE}/{isbn}.jpg"
 
         # 3. Fallback to default cover
