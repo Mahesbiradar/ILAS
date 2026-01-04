@@ -84,12 +84,12 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-100 via-white to-teal-50 relative overflow-hidden p-4">
-      {/* Background decorations */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-20 -left-20 w-72 h-72 bg-teal-300/30 rounded-full blur-3xl"></div>
-        <div className="absolute bottom-20 -right-20 w-80 h-80 bg-blue-400/20 rounded-full blur-3xl"></div>
-      </div>
+    <div
+      className="min-h-screen flex items-center justify-center relative overflow-hidden p-4 bg-gray-900 bg-cover bg-center bg-no-repeat"
+      style={{ backgroundImage: "url('https://res.cloudinary.com/dlailcpfy/image/upload/v1767533065/ilas_bg_mjhuol.jpg')" }}
+    >
+      {/* Dark overlay for better card contrast */}
+      <div className="absolute inset-0 bg-black/40 pointer-events-none"></div>
 
       {/* Form container */}
       <motion.div
@@ -214,7 +214,7 @@ export default function Login() {
                     />
                     <input
                       {...register("designation")}
-                      placeholder="Designation (e.g., Assistant Professor)"
+                      placeholder="Designation (e.g.,Professor)"
                       className="w-full border border-gray-300 p-2 rounded-lg text-sm focus:ring-2 focus:ring-blue-400 outline-none shadow-sm"
                     />
                   </>
