@@ -62,8 +62,19 @@ export default function MainLayout() {
         </main>
 
         {/* Footer */}
-        <footer className="bg-white border-t border-gray-100 py-2 text-center text-[11px] text-gray-500 shadow-sm">
-          © {new Date().getFullYear()} ILAS — Innovative Library Automation System
+        <footer className="bg-white border-t border-gray-100 py-3 text-center text-[11px] text-gray-500 shadow-sm">
+          <div className="flex flex-col md:flex-row items-center justify-center gap-1 md:gap-2">
+            <span>
+              © {new Date().getFullYear()} ILAS — Innovative Library Automation System
+            </span>
+            <span className="hidden md:inline">|</span>
+            <a
+              href="mailto:ilasdrait@gmail.com"
+              className="text-blue-600 hover:underline"
+            >
+              ilasdrait@gmail.com
+            </a>
+          </div>
         </footer>
       </div>
     </div>

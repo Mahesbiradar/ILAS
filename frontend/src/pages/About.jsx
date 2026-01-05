@@ -60,11 +60,10 @@ export default function About() {
             <strong>Backend:</strong> Django REST Framework (DRF)
           </li>
           <li>
-            <strong>Database:</strong> PostgreSQL / Supabase
+            <strong>Database:</strong> PostgreSQL / Railway
           </li>
           <li>
-            <strong>Hosting:</strong> Vercel (Frontend), Railway / Supabase
-            (Backend)
+            <strong>Hosting:</strong> Vercel (Frontend), Railway(Backend)
           </li>
           <li>
             <strong>Version Control:</strong> Git & GitHub
